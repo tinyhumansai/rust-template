@@ -44,7 +44,11 @@ async fn module_rejects_an_empty_name_over_the_bus() -> tinybus::Result<()> {
     let proxy = client.proxy(INTERFACE, OBJECT_PATH, INTERFACE)?;
     let result = proxy.call::<String>("Greet", ("   ",)).await;
 
-    let error = result.expect_err("whitespace-only names must be rejected");
+    let Err(error) = result else {
+        return Err(tinybus::Error::failed(
+            "whitespace-only names unexpectedly succeeded",
+        ));
+    };
     assert!(error.to_string().contains("name must not be empty"));
     Ok(())
 }
