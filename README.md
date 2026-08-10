@@ -48,7 +48,10 @@ tests/
 examples/
 └── basic.rs            # compiled and linted in CI
 docs/
-└── README.md           # architecture notes, specs, and ADRs
+├── README.md           # documentation index and conventions
+├── specs/              # behavior and architecture specifications
+├── plans/              # implementation-ordered delivery plans
+└── adr/                # immutable architecture decision records
 ```
 
 Feature areas use directory modules: implementation and exports live in
@@ -84,7 +87,10 @@ Run the **Release** workflow from the Actions tab with a `patch`, `minor`, or
 
 - [`AGENTS.md`](AGENTS.md) — repository guidelines for humans and agents
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to propose a change
-- [`docs/`](docs/README.md) — architecture notes and decision records
+- [`docs/specs/`](docs/specs/README.md) — behavior and architecture specs
+- [`docs/plans/`](docs/plans/README.md) — test-first implementation plans
+- [`docs/adr/`](docs/adr/0001-record-architecture-decisions.md) — architecture
+  decision records
 - [`SECURITY.md`](SECURITY.md) — how to report a vulnerability
 
 ## License

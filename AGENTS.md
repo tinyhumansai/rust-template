@@ -37,7 +37,10 @@ src/
     └── test.rs         # module-local unit tests
 tests/                  # integration tests against the public API only
 examples/               # runnable, compiled-in-CI usage examples
-docs/                   # architecture notes, specs, ADRs
+docs/
+├── specs/              # behavior and architecture specifications
+├── plans/              # test-first implementation plans
+└── adr/                # immutable architecture decision records
 ```
 
 Each feature area belongs in a focused module directory under `src/`. A module
@@ -169,6 +172,9 @@ Write documentation for the reader who has never seen the code.
   public surface, and important operational constraints.
 - Keep `README.md`, `docs/`, and module docs aligned with code changes in the
   same commit that changes behavior.
+- Write accepted behavior and constraints in `docs/specs/` before creating a
+  linked, implementation-ordered plan in `docs/plans/`. Specs define what and
+  why; plans define how and in what sequence.
 - Keep every Markdown file, including this one, at 500 lines or fewer. When a
   topic outgrows that, split it into focused files and link them from the
   nearest `README.md`.

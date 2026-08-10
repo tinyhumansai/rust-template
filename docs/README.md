@@ -10,14 +10,16 @@ where it cannot drift.
 ```text
 docs/
 ├── README.md      # this index
-├── spec/          # architecture and per-module specifications
+├── specs/         # behavior and architecture specifications
+├── plans/         # implementation plans derived from approved specs
 └── adr/           # architecture decision records, numbered and immutable
 ```
 
-- **`spec/`** — one file per module or subsystem, describing its purpose,
-  public surface, invariants, and operational constraints. Start with
-  `spec/README.md` as the top-level architecture reference once the crate grows
-  beyond a couple of modules.
+- **[`specs/`](specs/README.md)** — one file per feature, module, or subsystem,
+  describing its behavior, public surface, invariants, and acceptance criteria.
+- **[`plans/`](plans/README.md)** — implementation-ordered, test-first steps for
+  delivering an approved specification. Plans name exact files and verification
+  commands, and are updated as the work progresses.
 - **`adr/`** — a dated record per significant decision. Use
   [`adr/0001-record-architecture-decisions.md`](adr/0001-record-architecture-decisions.md)
   as the template. An accepted ADR is not edited; it is superseded by a later
@@ -34,3 +36,5 @@ covering their design, public surface, and important constraints.
 - Prefer a concrete example over an abstract description.
 - Link between documents rather than duplicating content; one fact lives in one
   place.
+- Write a specification before a plan: the spec defines the outcome and
+  constraints, while the plan defines the implementation sequence.
