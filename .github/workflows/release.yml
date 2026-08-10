@@ -69,7 +69,13 @@ jobs:
 
           metadata="$(cargo metadata --format-version 1 --no-deps)"
           crate_name="$(jq -r '.packages[0].name' <<< "$metadata")"
-          current_version="$(jq -r '.packages[0].version' <<< "$metadata")"
+          manifest_version="$(jq -r '.packages[0].version' <<< "$metadata")"
+          latest_tag="$(git tag --list 'v[0-9]*' --sort=-version:refname | head -n 1)"
+          if [[ -n "$latest_tag" ]]; then
+            current_version="${latest_tag#v}"
+          else
+            current_version="$manifest_version"
+          fi
           tinybus_version="$(
             cargo metadata \
               --manifest-path vendor/tinybus/Cargo.toml \
@@ -165,12 +171,14 @@ jobs:
             target/package/tinybus-source-*.tar.gz
           if-no-files-found: error
 
-      - name: Push release commit and tag
+      # The release commit is intentionally tag-only. Protected main requires
+      # a pull request, while the immutable tag gives every release an exact
+      # versioned source tree without granting Actions a bypass credential.
+      - name: Push release tag
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          git push origin "HEAD:${GITHUB_REF_NAME}"
           git push origin "${RELEASE_TAG}"
 
       - name: Publish to crates.io
