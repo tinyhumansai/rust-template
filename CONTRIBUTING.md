@@ -18,6 +18,13 @@ cargo build --all-targets --all-features
 cargo test --all-features
 ```
 
+CI also requires at least 90% line coverage in every source file. After
+installing `cargo-llvm-cov`, run the same gate locally:
+
+```sh
+.github/scripts/check-file-coverage.sh 90 target/coverage.json
+```
+
 The bundled example should also run:
 
 ```sh
@@ -56,6 +63,7 @@ regardless.
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
 - [ ] `cargo build --all-targets --all-features`
 - [ ] `cargo test --all-features`
+- [ ] `.github/scripts/check-file-coverage.sh 90 target/coverage.json`
 - [ ] tests added or updated for behavior changes
 - [ ] documentation updated for public API, architecture, or usage changes
 - [ ] the pull request is focused on one logical change

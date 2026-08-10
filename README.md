@@ -27,8 +27,8 @@ template-specific value.
 | --- | --- |
 | Layout | Directory modules with `mod.rs` / `types.rs` / `test.rs`, a crate-wide error type, integration tests, and a runnable example |
 | Lints | `unsafe_code` forbidden, `missing_docs`, clippy `all` + `pedantic`, no `unwrap`/`expect`/`panic`/`todo` in library code — all declared in `[lints]` so local and CI runs agree |
-| CI | Format, clippy, build, test (default and all features), rustdoc with `-D warnings`, an MSRV build, and a `cargo-deny` supply-chain check |
-| Release | Manual `workflow_dispatch` bump that validates, versions, tags, and publishes to crates.io |
+| CI | Format, clippy, build, test (default and all features), at least 90% line coverage in every source file, rustdoc with `-D warnings`, an MSRV build, and a `cargo-deny` supply-chain check |
+| Release | Manual `workflow_dispatch` bump that validates, versions, tags, publishes to crates.io, and creates a GitHub release with crate and TinyBus assets |
 | Community | Issue and pull request templates, Dependabot, contributing, security, support, and code of conduct docs |
 | Agents | [`AGENTS.md`](AGENTS.md) as the single source of truth, symlinked as `CLAUDE.md`, plus a `.claude/settings.json` allowlist for the standard commands |
 | Vendor | TinyBus pinned as the `vendor/tinybus` submodule, initialized by CI and release workflows |
@@ -83,14 +83,19 @@ Those four checks are exactly what CI runs. Optional extras:
 ```sh
 cargo doc --no-deps --all-features   # CI builds this with RUSTDOCFLAGS="-D warnings"
 cargo deny check all                 # supply-chain check; see deny.toml
+cargo install cargo-llvm-cov         # once, before running the coverage gate
+.github/scripts/check-file-coverage.sh 90 target/coverage.json
 ```
 
 ## Releasing
 
 Run the **Release** workflow from the Actions tab with a `patch`, `minor`, or
 `major` bump. It revalidates the crate, bumps the version, commits, tags
-`vX.Y.Z`, and publishes to crates.io. Do not hand-edit the version in
-`Cargo.toml`.
+`vX.Y.Z`, publishes to crates.io, and creates a GitHub release. Release assets
+include the crate package, the pinned TinyBus source and module SDK, and native
+Linux and macOS bundles containing the TinyBus CLI, loadable modules, their
+SHA-256 `modules.toml` allowlist, and the protocol/module documentation. Do not
+hand-edit the version in `Cargo.toml`.
 
 ## Documentation
 
