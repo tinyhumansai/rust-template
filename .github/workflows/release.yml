@@ -21,16 +21,14 @@ permissions:
   contents: write
 
 jobs:
-  publish:
-    name: Publish crate
+  prepare:
+    name: Prepare release
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    environment: Production
     outputs:
       crate_name: ${{ steps.version.outputs.crate_name }}
       next_version: ${{ steps.version.outputs.next_version }}
       tag: ${{ steps.version.outputs.tag }}
-      tinybus_version: ${{ steps.version.outputs.tinybus_version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -50,6 +48,9 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build
+        run: cargo build --all-targets --all-features
 
       - name: Test
         run: cargo test --all-features
@@ -71,19 +72,12 @@ jobs:
           metadata="$(cargo metadata --format-version 1 --no-deps)"
           crate_name="$(jq -r '.packages[0].name' <<< "$metadata")"
           current_version="$(jq -r '.packages[0].version' <<< "$metadata")"
-          tinybus_version="$(
-            cargo metadata \
-              --manifest-path vendor/tinybus/Cargo.toml \
-              --format-version 1 \
-              --no-deps \
-              | jq -r '.packages[] | select(.name == "tinybus") | .version'
-          )"
-          if [[ -z "$current_version" || "$current_version" == "null" ]]; then
-            echo "Could not resolve the current crate version" >&2
+          if [[ -z "$crate_name" || "$crate_name" == "null" ]]; then
+            echo "Could not resolve the crate name" >&2
             exit 1
           fi
-          if [[ -z "$tinybus_version" || "$tinybus_version" == "null" ]]; then
-            echo "Could not resolve the TinyBus version" >&2
+          if [[ -z "$current_version" || "$current_version" == "null" ]]; then
+            echo "Could not resolve the current crate version" >&2
             exit 1
           fi
 
@@ -111,8 +105,8 @@ jobs:
 
           next_version="${major}.${minor}.${patch}"
           tag="v${next_version}"
-
           git fetch --tags origin
+
           if git rev-parse --verify --quiet "refs/tags/${tag}"; then
             if [[ "${{ inputs.bump }}" != "current" ]]; then
               echo "Tag ${tag} already exists" >&2
@@ -127,6 +121,9 @@ jobs:
               echo "Tag ${tag} does not contain version ${current_version}" >&2
               exit 1
             fi
+          elif [[ "${{ inputs.bump }}" == "current" ]]; then
+            echo "Tag ${tag} does not exist; choose a semantic version bump" >&2
+            exit 1
           fi
 
           {
@@ -134,7 +131,6 @@ jobs:
             echo "current_version=${current_version}"
             echo "next_version=${next_version}"
             echo "tag=${tag}"
-            echo "tinybus_version=${tinybus_version}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Update crate version
@@ -158,59 +154,12 @@ jobs:
           git add Cargo.toml Cargo.lock
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
-
-      - name: Package crate
-        run: cargo package --locked
-
-      - name: Package TinyBus source and module SDK
-        run: |
-          set -euo pipefail
-          tinybus_revision="$(git -C vendor/tinybus rev-parse --short=12 HEAD)"
-          git -C vendor/tinybus archive \
-            --format=tar.gz \
-            --prefix="tinybus-${tinybus_revision}/" \
-            --output="$PWD/target/package/tinybus-source-${tinybus_revision}.tar.gz" \
-            HEAD
-
-      - name: Upload source packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-packages
-          path: |
-            target/package/${{ steps.version.outputs.crate_name }}-${{ steps.version.outputs.next_version }}.crate
-            target/package/tinybus-source-*.tar.gz
-          if-no-files-found: error
-
-      - name: Push release commit and tag
-        env:
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          set -euo pipefail
           git push origin "HEAD:${GITHUB_REF_NAME}"
           git push origin "${RELEASE_TAG}"
 
-      - name: Check crates.io credentials
-        id: crates_io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [[ -n "$CARGO_REGISTRY_TOKEN" ]]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "### crates.io publication skipped" >> "$GITHUB_STEP_SUMMARY"
-            echo "The Production environment has no CARGO_REGISTRY_TOKEN." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Publish to crates.io
-        if: ${{ steps.crates_io.outputs.configured == 'true' }}
-        run: cargo publish --locked
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-  tinybus-bundles:
-    name: TinyBus bundle (${{ matrix.id }})
-    needs: publish
+  native-bundles:
+    name: Rust module bundle (${{ matrix.id }})
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -252,15 +201,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.publish.outputs.tag }}
+          ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
           submodules: true
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: vendor/tinybus -> target
 
       - name: Verify native Rust target
         shell: bash
@@ -274,134 +221,99 @@ jobs:
             exit 1
           fi
 
-      - name: Build TinyBus CLI and loadable modules
-        if: ${{ runner.os != 'Windows' }}
-        working-directory: vendor/tinybus
-        run: >-
-          cargo build --locked --release --package tinybus --all-features
-          --bin tinybus --example module_clock --example module_clock_two
+      - name: Build installable module
+        run: cargo build --locked --release --lib
 
-      - name: Build TinyBus library and loadable modules
-        if: ${{ runner.os == 'Windows' }}
-        working-directory: vendor/tinybus
-        run: >-
-          cargo build --locked --release --package tinybus
-          --no-default-features --features modules,macros
-          --example module_clock --example module_clock_two
-
-      - name: Assemble Unix bundle
+      - name: Assemble Unix module package
         if: ${{ runner.os != 'Windows' }}
-        id: bundle_unix
+        id: unix_package
         shell: bash
         env:
           BUNDLE_ID: ${{ matrix.id }}
-          TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
+          CRATE_NAME: ${{ needs.prepare.outputs.crate_name }}
+          VERSION: ${{ needs.prepare.outputs.next_version }}
         run: |
           set -euo pipefail
 
-          bundle_name="tinybus-${TINYBUS_VERSION}-${BUNDLE_ID}"
-          bundle_root="dist/${bundle_name}"
-          module_root="${bundle_root}/modules"
-          mkdir -p "${bundle_root}/bin" "$module_root" "${bundle_root}/docs"
+          library_name="${CRATE_NAME//-/_}"
+          case "$RUNNER_OS" in
+            Linux) module="target/release/lib${library_name}.so" ;;
+            macOS) module="target/release/lib${library_name}.dylib" ;;
+            *) echo "unsupported Unix runner: ${RUNNER_OS}" >&2; exit 1 ;;
+          esac
+          if [[ ! -f "$module" ]]; then
+            echo "module artifact is missing: ${module}" >&2
+            exit 1
+          fi
 
-          install -m 755 vendor/tinybus/target/release/tinybus "${bundle_root}/bin/tinybus"
+          package_name="${CRATE_NAME}-${VERSION}-${BUNDLE_ID}"
+          package_root="dist/${package_name}"
+          mkdir -p "$package_root"
+          install -m 755 "$module" "$package_root/"
+          install -m 644 LICENSE MODULE.md "$package_root/"
 
-          module_clock="$(find vendor/tinybus/target/release/examples -maxdepth 1 -type f \( -name 'libmodule_clock.so' -o -name 'libmodule_clock.dylib' \) -print -quit)"
-          module_clock_two="$(find vendor/tinybus/target/release/examples -maxdepth 1 -type f \( -name 'libmodule_clock_two.so' -o -name 'libmodule_clock_two.dylib' \) -print -quit)"
-          for module in "$module_clock" "$module_clock_two"; do
-            if [[ -z "$module" || ! -f "$module" ]]; then
-              echo "a TinyBus module artifact is missing" >&2
-              exit 1
-            fi
-            install -m 644 "$module" "$module_root/"
-          done
+          module_name="$(basename "$module")"
+          module_hash="$(shasum -a 256 "$package_root/$module_name" | awk '{print $1}')"
+          printf '"%s" = "%s"\n' "$module_name" "$module_hash" \
+            > "$package_root/modules.toml"
 
-          : > "${module_root}/modules.toml"
-          for module in \
-            "${module_root}/$(basename "$module_clock")" \
-            "${module_root}/$(basename "$module_clock_two")"; do
-            module_name="$(basename "$module")"
-            module_hash="$(shasum -a 256 "$module" | awk '{print $1}')"
-            printf '"%s" = "%s"\n' "$module_name" "$module_hash" >> "${module_root}/modules.toml"
-          done
+          tar -C "$package_root" -czf "dist/${package_name}.tar.gz" .
+          echo "archive=dist/${package_name}.tar.gz" >> "$GITHUB_OUTPUT"
 
-          install -m 644 vendor/tinybus/LICENSE "${bundle_root}/LICENSE"
-          install -m 644 vendor/tinybus/README.md "${bundle_root}/README.md"
-          install -m 644 vendor/tinybus/docs/protocol.md "${bundle_root}/docs/protocol.md"
-          cp -R vendor/tinybus/docs/modules "${bundle_root}/docs/modules"
-
-          tar -C dist -czf "dist/${bundle_name}.tar.gz" "$bundle_name"
-          echo "archive=dist/${bundle_name}.tar.gz" >> "$GITHUB_OUTPUT"
-
-      - name: Assemble Windows bundle
+      - name: Assemble Windows module package
         if: ${{ runner.os == 'Windows' }}
-        id: bundle_windows
+        id: windows_package
         shell: pwsh
         env:
           BUNDLE_ID: ${{ matrix.id }}
-          TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
+          CRATE_NAME: ${{ needs.prepare.outputs.crate_name }}
+          VERSION: ${{ needs.prepare.outputs.next_version }}
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $bundleName = "tinybus-$env:TINYBUS_VERSION-$env:BUNDLE_ID"
-          $bundleRoot = "dist/$bundleName"
-          $moduleRoot = "$bundleRoot/modules"
-          New-Item -ItemType Directory -Force $moduleRoot, "$bundleRoot/docs" | Out-Null
-
-          $moduleClock = 'vendor/tinybus/target/release/examples/module_clock.dll'
-          $moduleClockTwo = 'vendor/tinybus/target/release/examples/module_clock_two.dll'
-          foreach ($module in @($moduleClock, $moduleClockTwo)) {
-            if (-not (Test-Path -LiteralPath $module -PathType Leaf)) {
-              throw "a TinyBus module artifact is missing: $module"
-            }
-            Copy-Item -LiteralPath $module -Destination $moduleRoot
+          $libraryName = $env:CRATE_NAME.Replace('-', '_')
+          $module = "target/release/$libraryName.dll"
+          if (-not (Test-Path -LiteralPath $module -PathType Leaf)) {
+            throw "module artifact is missing: $module"
           }
 
-          $allowlist = foreach ($module in Get-ChildItem -LiteralPath $moduleRoot -Filter '*.dll') {
-            $hash = (Get-FileHash -LiteralPath $module.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            '"{0}" = "{1}"' -f $module.Name, $hash
-          }
+          $packageName = "$env:CRATE_NAME-$env:VERSION-$env:BUNDLE_ID"
+          $packageRoot = "dist/$packageName"
+          New-Item -ItemType Directory -Force $packageRoot | Out-Null
+          Copy-Item -LiteralPath $module, 'LICENSE', 'MODULE.md' -Destination $packageRoot
+
+          $moduleName = Split-Path -Leaf $module
+          $hash = (Get-FileHash -LiteralPath "$packageRoot/$moduleName" -Algorithm SHA256).Hash.ToLowerInvariant()
           $utf8 = [System.Text.UTF8Encoding]::new($false)
-          [System.IO.File]::WriteAllLines("$moduleRoot/modules.toml", $allowlist, $utf8)
-
-          Copy-Item -LiteralPath @(
-            'vendor/tinybus/LICENSE',
-            'vendor/tinybus/README.md'
-          ) -Destination $bundleRoot
-          Copy-Item -LiteralPath 'vendor/tinybus/docs/protocol.md' -Destination "$bundleRoot/docs"
-          Copy-Item -LiteralPath 'vendor/tinybus/docs/modules' -Destination "$bundleRoot/docs/modules" -Recurse
-          $windowsNote = @(
-            'TinyBus Windows module bundle',
-            '',
-            'This bundle contains the in-process module DLLs and SHA-256 allowlist.',
-            'The TinyBus CLI is not included because its production transport uses',
-            'Unix-domain sockets; Windows named-pipe support is not implemented yet.'
+          [System.IO.File]::WriteAllText(
+            "$packageRoot/modules.toml",
+            ('"{0}" = "{1}"' -f $moduleName, $hash) + [Environment]::NewLine,
+            $utf8
           )
-          [System.IO.File]::WriteAllLines("$bundleRoot/WINDOWS.md", $windowsNote, $utf8)
 
-          $archive = "dist/$bundleName.zip"
-          Compress-Archive -Path $bundleRoot -DestinationPath $archive
+          $archive = "dist/$packageName.zip"
+          Compress-Archive -Path "$packageRoot/*" -DestinationPath $archive
           "archive=$archive" >> $env:GITHUB_OUTPUT
 
-      - name: Upload Unix bundle
+      - name: Upload Unix package
         if: ${{ runner.os != 'Windows' }}
         uses: actions/upload-artifact@v4
         with:
-          name: tinybus-${{ matrix.id }}
-          path: ${{ steps.bundle_unix.outputs.archive }}
+          name: ${{ needs.prepare.outputs.crate_name }}-${{ matrix.id }}
+          path: ${{ steps.unix_package.outputs.archive }}
           if-no-files-found: error
 
-      - name: Upload Windows bundle
+      - name: Upload Windows package
         if: ${{ runner.os == 'Windows' }}
         uses: actions/upload-artifact@v4
         with:
-          name: tinybus-${{ matrix.id }}
-          path: ${{ steps.bundle_windows.outputs.archive }}
+          name: ${{ needs.prepare.outputs.crate_name }}-${{ matrix.id }}
+          path: ${{ steps.windows_package.outputs.archive }}
           if-no-files-found: error
 
-  linux-distro-bundles:
-    name: TinyBus bundle (${{ matrix.id }})
-    needs: publish
+  distro-bundles:
+    name: Rust module bundle (${{ matrix.id }})
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -436,7 +348,7 @@ jobs:
     steps:
       - name: Install Fedora build tools
         if: ${{ matrix.family == 'fedora' }}
-        run: dnf install -y findutils gcc git gzip make perl tar
+        run: dnf install -y gcc git gzip make perl tar
 
       - name: Install Arch Linux build tools
         if: ${{ matrix.family == 'archlinux' }}
@@ -444,7 +356,7 @@ jobs:
 
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.publish.outputs.tag }}
+          ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
           submodules: true
 
@@ -461,67 +373,52 @@ jobs:
             exit 1
           fi
 
-      - name: Build TinyBus CLI and loadable modules
-        working-directory: vendor/tinybus
-        run: >-
-          cargo build --locked --release --package tinybus --all-features
-          --bin tinybus --example module_clock --example module_clock_two
+      - name: Build installable module
+        run: cargo build --locked --release --lib
 
-      - name: Assemble distro bundle
-        id: bundle
+      - name: Assemble distribution module package
+        id: package
         env:
           BUNDLE_ID: ${{ matrix.id }}
-          TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
+          CRATE_NAME: ${{ needs.prepare.outputs.crate_name }}
+          VERSION: ${{ needs.prepare.outputs.next_version }}
         run: |
           set -euo pipefail
 
-          bundle_name="tinybus-${TINYBUS_VERSION}-${BUNDLE_ID}"
-          bundle_root="dist/${bundle_name}"
-          module_root="${bundle_root}/modules"
-          mkdir -p "${bundle_root}/bin" "$module_root" "${bundle_root}/docs"
+          library_name="${CRATE_NAME//-/_}"
+          module="target/release/lib${library_name}.so"
+          if [[ ! -f "$module" ]]; then
+            echo "module artifact is missing: ${module}" >&2
+            exit 1
+          fi
 
-          install -m 755 vendor/tinybus/target/release/tinybus "${bundle_root}/bin/tinybus"
+          package_name="${CRATE_NAME}-${VERSION}-${BUNDLE_ID}"
+          package_root="dist/${package_name}"
+          mkdir -p "$package_root"
+          install -m 755 "$module" "$package_root/"
+          install -m 644 LICENSE MODULE.md "$package_root/"
 
-          module_clock="$(find vendor/tinybus/target/release/examples -maxdepth 1 -type f -name 'libmodule_clock.so' -print -quit)"
-          module_clock_two="$(find vendor/tinybus/target/release/examples -maxdepth 1 -type f -name 'libmodule_clock_two.so' -print -quit)"
-          for module in "$module_clock" "$module_clock_two"; do
-            if [[ -z "$module" || ! -f "$module" ]]; then
-              echo "a TinyBus module artifact is missing" >&2
-              exit 1
-            fi
-            install -m 644 "$module" "$module_root/"
-          done
+          module_name="$(basename "$module")"
+          module_hash="$(sha256sum "$package_root/$module_name" | awk '{print $1}')"
+          printf '"%s" = "%s"\n' "$module_name" "$module_hash" \
+            > "$package_root/modules.toml"
 
-          : > "${module_root}/modules.toml"
-          for module in \
-            "${module_root}/$(basename "$module_clock")" \
-            "${module_root}/$(basename "$module_clock_two")"; do
-            module_name="$(basename "$module")"
-            module_hash="$(sha256sum "$module" | awk '{print $1}')"
-            printf '"%s" = "%s"\n' "$module_name" "$module_hash" >> "${module_root}/modules.toml"
-          done
+          tar -C "$package_root" -czf "dist/${package_name}.tar.gz" .
+          echo "archive=dist/${package_name}.tar.gz" >> "$GITHUB_OUTPUT"
 
-          install -m 644 vendor/tinybus/LICENSE "${bundle_root}/LICENSE"
-          install -m 644 vendor/tinybus/README.md "${bundle_root}/README.md"
-          install -m 644 vendor/tinybus/docs/protocol.md "${bundle_root}/docs/protocol.md"
-          cp -R vendor/tinybus/docs/modules "${bundle_root}/docs/modules"
-
-          tar -C dist -czf "dist/${bundle_name}.tar.gz" "$bundle_name"
-          echo "archive=dist/${bundle_name}.tar.gz" >> "$GITHUB_OUTPUT"
-
-      - name: Upload distro bundle
+      - name: Upload distribution package
         uses: actions/upload-artifact@v4
         with:
-          name: tinybus-${{ matrix.id }}
-          path: ${{ steps.bundle.outputs.archive }}
+          name: ${{ needs.prepare.outputs.crate_name }}-${{ matrix.id }}
+          path: ${{ steps.package.outputs.archive }}
           if-no-files-found: error
 
   github-release:
     name: Create GitHub release
     needs:
-      - publish
-      - tinybus-bundles
-      - linux-distro-bundles
+      - prepare
+      - native-bundles
+      - distro-bundles
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -530,10 +427,10 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Create or update release and upload assets
+      - name: Create immutable release with module packages
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
