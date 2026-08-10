@@ -251,20 +251,30 @@ jobs:
           $verifyRoot = Join-Path $env:RUNNER_TEMP 'rust-template-module-verify'
           New-Item -ItemType Directory -Force $verifyRoot | Out-Null
 
-          $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          & icacls.exe $verifyRoot /inheritance:r | Out-Null
-          if ($LASTEXITCODE -ne 0) {
-            throw 'could not remove inherited permissions from the verification directory'
+          $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+          $security = [System.Security.AccessControl.DirectorySecurity]::new()
+          $security.SetOwner($identity.User)
+          $security.SetAccessRuleProtection($true, $false)
+          $rights = [System.Security.AccessControl.FileSystemRights]::FullControl
+          $inheritance = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+          $propagation = [System.Security.AccessControl.PropagationFlags]::None
+          $access = [System.Security.AccessControl.AccessControlType]::Allow
+          foreach ($sidValue in @(
+            $identity.User.Value,
+            'S-1-5-18',
+            'S-1-5-32-544'
+          )) {
+            $sid = [System.Security.Principal.SecurityIdentifier]::new($sidValue)
+            $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+              $sid,
+              $rights,
+              $inheritance,
+              $propagation,
+              $access
+            )
+            [void]$security.AddAccessRule($rule)
           }
-          $grants = @(
-            "*${currentSid}:(OI)(CI)F",
-            '*S-1-5-18:(OI)(CI)F',
-            '*S-1-5-32-544:(OI)(CI)F'
-          )
-          & icacls.exe $verifyRoot /grant:r $grants | Out-Null
-          if ($LASTEXITCODE -ne 0) {
-            throw 'could not secure the verification directory ACL'
-          }
+          Set-Acl -LiteralPath $verifyRoot -AclObject $security
 
           $verifiedModule = Join-Path $verifyRoot "$libraryName.dll"
           Copy-Item -LiteralPath $module -Destination $verifiedModule
