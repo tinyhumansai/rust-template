@@ -247,7 +247,28 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $libraryName = $env:CRATE_NAME.Replace('-', '_')
-          cargo run --locked --example verify_module -- "target/release/$libraryName.dll"
+          $module = "target/release/$libraryName.dll"
+          $verifyRoot = Join-Path $env:RUNNER_TEMP 'rust-template-module-verify'
+          New-Item -ItemType Directory -Force $verifyRoot | Out-Null
+
+          $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          & icacls.exe $verifyRoot /inheritance:r | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw 'could not remove inherited permissions from the verification directory'
+          }
+          $grants = @(
+            "*${currentSid}:(OI)(CI)F",
+            '*S-1-5-18:(OI)(CI)F',
+            '*S-1-5-32-544:(OI)(CI)F'
+          )
+          & icacls.exe $verifyRoot /grant:r $grants | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw 'could not secure the verification directory ACL'
+          }
+
+          $verifiedModule = Join-Path $verifyRoot "$libraryName.dll"
+          Copy-Item -LiteralPath $module -Destination $verifiedModule
+          cargo run --locked --example verify_module -- $verifiedModule
 
       - name: Assemble Unix module package
         if: ${{ runner.os != 'Windows' }}
@@ -407,8 +428,11 @@ jobs:
         run: |
           set -euo pipefail
           library_name="${CRATE_NAME//-/_}"
+          verify_root="/opt/${CRATE_NAME}-module-verify"
+          install -d -m 700 "$verify_root"
+          install -m 755 "target/release/lib${library_name}.so" "$verify_root/"
           cargo run --locked --example verify_module -- \
-            "target/release/lib${library_name}.so"
+            "$verify_root/lib${library_name}.so"
 
       - name: Assemble distribution module package
         id: package
