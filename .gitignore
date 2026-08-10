@@ -5,6 +5,7 @@
 
 # Coverage output
 /coverage/
+/coverage.json
 *.profraw
 *.profdata
 lcov.info
