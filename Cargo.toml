@@ -11,7 +11,15 @@ readme = "README.md"
 keywords = ["template"]
 categories = ["development-tools"]
 # Keep the published package to what a consumer actually needs.
-exclude = [".github/", "docs/", "worktrees/", ".env.example", "deny.toml"]
+exclude = [
+    ".github/",
+    ".gitmodules",
+    "docs/",
+    "vendor/",
+    "worktrees/",
+    ".env.example",
+    "deny.toml",
+]
 
 [dependencies]
 # Derive macros for the crate-wide error type in `src/error/mod.rs`. Every

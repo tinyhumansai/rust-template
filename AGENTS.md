@@ -21,6 +21,8 @@ Do this once, in a single commit, before writing feature code:
 - [ ] Confirm `license` and `LICENSE` match the project's intended license.
 - [ ] Update the security contact in `SECURITY.md`.
 - [ ] Replace `ROADMAP.md` with the real plan, or delete it.
+- [ ] Decide whether the project uses TinyBus. Keep `vendor/tinybus` pinned and
+      wire the required crate/features, or remove the submodule deliberately.
 - [ ] Rewrite the "Project Structure" section below to describe this crate.
 
 ## Project Structure
@@ -37,6 +39,7 @@ src/
     └── test.rs         # module-local unit tests
 tests/                  # integration tests against the public API only
 examples/               # runnable, compiled-in-CI usage examples
+vendor/tinybus/         # pinned TinyBus source; optional until wired by a project
 docs/
 ├── specs/              # behavior and architecture specifications
 ├── plans/              # test-first implementation plans
@@ -133,6 +136,21 @@ add one:
 
 Keep `Cargo.lock` committed; this crate ships a lockfile so CI and releases are
 reproducible.
+
+### Vendored dependencies
+
+TinyBus is registered as the `vendor/tinybus` git submodule and pinned by its
+gitlink. Initialize it after cloning with:
+
+```sh
+git submodule update --init --recursive
+```
+
+Do not edit vendored code from the parent repository. Make TinyBus changes in
+its own repository, push them there, then update this repository's gitlink in a
+separate commit. If the generated project consumes TinyBus, use the exact crate
+path and minimal features it needs; the template does not force that dependency
+on every generated crate.
 
 ## Testing
 

@@ -31,6 +31,7 @@ template-specific value.
 | Release | Manual `workflow_dispatch` bump that validates, versions, tags, and publishes to crates.io |
 | Community | Issue and pull request templates, Dependabot, contributing, security, support, and code of conduct docs |
 | Agents | [`AGENTS.md`](AGENTS.md) as the single source of truth, symlinked as `CLAUDE.md`, plus a `.claude/settings.json` allowlist for the standard commands |
+| Vendor | TinyBus pinned as the `vendor/tinybus` submodule, initialized by CI and release workflows |
 
 ## Layout
 
@@ -47,6 +48,8 @@ tests/
 └── public_api.rs       # integration tests against the public API only
 examples/
 └── basic.rs            # compiled and linted in CI
+vendor/
+└── tinybus/            # pinned TinyBus git submodule
 docs/
 ├── README.md           # documentation index and conventions
 ├── specs/              # behavior and architecture specifications
@@ -60,6 +63,12 @@ Feature areas use directory modules: implementation and exports live in
 `CLAUDE.md` is a symlink to it so every coding agent reads one source of truth.
 
 ## Development
+
+Clone with submodules, or initialize them before building:
+
+```sh
+git submodule update --init --recursive
+```
 
 ```sh
 cargo fmt --all -- --check
