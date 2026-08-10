@@ -209,15 +209,45 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   tinybus-bundles:
-    name: TinyBus bundle (${{ matrix.os }})
+    name: TinyBus bundle (${{ matrix.id }})
     needs: publish
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+        include:
+          - id: ubuntu-22.04-x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - id: ubuntu-22.04-arm64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - id: ubuntu-24.04-x86_64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - id: ubuntu-24.04-arm64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - id: macos-15-x86_64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+          - id: macos-15-arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+          - id: macos-26-x86_64
+            os: macos-26-intel
+            target: x86_64-apple-darwin
+          - id: macos-26-arm64
+            os: macos-26
+            target: aarch64-apple-darwin
+          - id: windows-2022-x86_64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - id: windows-2025-x86_64
+            os: windows-2025
+            target: x86_64-pc-windows-msvc
+          - id: windows-11-arm64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -231,6 +261,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: vendor/tinybus -> target
+
+      - name: Verify native Rust target
+        shell: bash
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          actual_target="$(rustc -vV | sed -n 's/^host: //p')"
+          if [[ "$actual_target" != "$EXPECTED_TARGET" ]]; then
+            echo "expected ${EXPECTED_TARGET}, got ${actual_target}" >&2
+            exit 1
+          fi
 
       - name: Build TinyBus CLI and loadable modules
         if: ${{ runner.os != 'Windows' }}
@@ -252,12 +294,12 @@ jobs:
         id: bundle_unix
         shell: bash
         env:
+          BUNDLE_ID: ${{ matrix.id }}
           TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
         run: |
           set -euo pipefail
 
-          target_triple="$(rustc -vV | sed -n 's/^host: //p')"
-          bundle_name="tinybus-${TINYBUS_VERSION}-${target_triple}"
+          bundle_name="tinybus-${TINYBUS_VERSION}-${BUNDLE_ID}"
           bundle_root="dist/${bundle_name}"
           module_root="${bundle_root}/modules"
           mkdir -p "${bundle_root}/bin" "$module_root" "${bundle_root}/docs"
@@ -296,12 +338,12 @@ jobs:
         id: bundle_windows
         shell: pwsh
         env:
+          BUNDLE_ID: ${{ matrix.id }}
           TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $targetTriple = (rustc -vV | Select-String '^host: ').Line.Substring(6)
-          $bundleName = "tinybus-$env:TINYBUS_VERSION-$targetTriple"
+          $bundleName = "tinybus-$env:TINYBUS_VERSION-$env:BUNDLE_ID"
           $bundleRoot = "dist/$bundleName"
           $moduleRoot = "$bundleRoot/modules"
           New-Item -ItemType Directory -Force $moduleRoot, "$bundleRoot/docs" | Out-Null
@@ -345,7 +387,7 @@ jobs:
         if: ${{ runner.os != 'Windows' }}
         uses: actions/upload-artifact@v4
         with:
-          name: tinybus-${{ runner.os }}
+          name: tinybus-${{ matrix.id }}
           path: ${{ steps.bundle_unix.outputs.archive }}
           if-no-files-found: error
 
@@ -353,8 +395,125 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         uses: actions/upload-artifact@v4
         with:
-          name: tinybus-${{ runner.os }}
+          name: tinybus-${{ matrix.id }}
           path: ${{ steps.bundle_windows.outputs.archive }}
+          if-no-files-found: error
+
+  linux-distro-bundles:
+    name: TinyBus bundle (${{ matrix.id }})
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: fedora-43-x86_64
+            os: ubuntu-24.04
+            container: fedora:43
+            target: x86_64-unknown-linux-gnu
+            family: fedora
+          - id: fedora-43-arm64
+            os: ubuntu-24.04-arm
+            container: fedora:43
+            target: aarch64-unknown-linux-gnu
+            family: fedora
+          - id: fedora-44-x86_64
+            os: ubuntu-24.04
+            container: fedora:44
+            target: x86_64-unknown-linux-gnu
+            family: fedora
+          - id: fedora-44-arm64
+            os: ubuntu-24.04-arm
+            container: fedora:44
+            target: aarch64-unknown-linux-gnu
+            family: fedora
+          - id: archlinux-rolling-x86_64
+            os: ubuntu-24.04
+            container: archlinux:base-devel
+            target: x86_64-unknown-linux-gnu
+            family: archlinux
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Install Fedora build tools
+        if: ${{ matrix.family == 'fedora' }}
+        run: dnf install -y findutils gcc git gzip make perl tar
+
+      - name: Install Arch Linux build tools
+        if: ${{ matrix.family == 'archlinux' }}
+        run: pacman -Syu --noconfirm base-devel git
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.publish.outputs.tag }}
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify native Rust target
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          actual_target="$(rustc -vV | sed -n 's/^host: //p')"
+          if [[ "$actual_target" != "$EXPECTED_TARGET" ]]; then
+            echo "expected ${EXPECTED_TARGET}, got ${actual_target}" >&2
+            exit 1
+          fi
+
+      - name: Build TinyBus CLI and loadable modules
+        working-directory: vendor/tinybus
+        run: >-
+          cargo build --locked --release --package tinybus --all-features
+          --bin tinybus --example module_clock --example module_clock_two
+
+      - name: Assemble distro bundle
+        id: bundle
+        env:
+          BUNDLE_ID: ${{ matrix.id }}
+          TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
+        run: |
+          set -euo pipefail
+
+          bundle_name="tinybus-${TINYBUS_VERSION}-${BUNDLE_ID}"
+          bundle_root="dist/${bundle_name}"
+          module_root="${bundle_root}/modules"
+          mkdir -p "${bundle_root}/bin" "$module_root" "${bundle_root}/docs"
+
+          install -m 755 vendor/tinybus/target/release/tinybus "${bundle_root}/bin/tinybus"
+
+          module_clock="$(find vendor/tinybus/target/release/examples -maxdepth 1 -type f -name 'libmodule_clock.so' -print -quit)"
+          module_clock_two="$(find vendor/tinybus/target/release/examples -maxdepth 1 -type f -name 'libmodule_clock_two.so' -print -quit)"
+          for module in "$module_clock" "$module_clock_two"; do
+            if [[ -z "$module" || ! -f "$module" ]]; then
+              echo "a TinyBus module artifact is missing" >&2
+              exit 1
+            fi
+            install -m 644 "$module" "$module_root/"
+          done
+
+          : > "${module_root}/modules.toml"
+          for module in \
+            "${module_root}/$(basename "$module_clock")" \
+            "${module_root}/$(basename "$module_clock_two")"; do
+            module_name="$(basename "$module")"
+            module_hash="$(sha256sum "$module" | awk '{print $1}')"
+            printf '"%s" = "%s"\n' "$module_name" "$module_hash" >> "${module_root}/modules.toml"
+          done
+
+          install -m 644 vendor/tinybus/LICENSE "${bundle_root}/LICENSE"
+          install -m 644 vendor/tinybus/README.md "${bundle_root}/README.md"
+          install -m 644 vendor/tinybus/docs/protocol.md "${bundle_root}/docs/protocol.md"
+          cp -R vendor/tinybus/docs/modules "${bundle_root}/docs/modules"
+
+          tar -C dist -czf "dist/${bundle_name}.tar.gz" "$bundle_name"
+          echo "archive=dist/${bundle_name}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Upload distro bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinybus-${{ matrix.id }}
+          path: ${{ steps.bundle.outputs.archive }}
           if-no-files-found: error
 
   github-release:
@@ -362,6 +521,7 @@ jobs:
     needs:
       - publish
       - tinybus-bundles
+      - linux-distro-bundles
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -378,9 +538,7 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "$RELEASE_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-assets/* \
-              --repo "$REPOSITORY" \
-              --clobber
+            echo "Release ${RELEASE_TAG} already exists; immutable assets are unchanged."
           else
             gh release create "$RELEASE_TAG" release-assets/* \
               --repo "$REPOSITORY" \
