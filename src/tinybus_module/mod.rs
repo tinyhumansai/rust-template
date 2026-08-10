@@ -1,6 +1,6 @@
-//! TinyBus module entrypoint and bus-facing interface.
+//! `TinyBus` module entrypoint and bus-facing interface.
 //!
-//! This adapter keeps the feature implementation independent from TinyBus while
+//! This adapter keeps the feature implementation independent from `TinyBus` while
 //! exposing it as an installable, dynamically loaded integration.
 
 use tinybus::{Connection, Result as TinyBusResult};
@@ -13,7 +13,9 @@ struct GreetingService;
 #[tinybus::interface(name = "ai.tinyhumans.rust_template.Greeting")]
 impl GreetingService {
     async fn greet(&self, name: String) -> TinyBusResult<String> {
-        crate::greet(&name).map_err(|error| tinybus::Error::failed(error.to_string()))
+        std::future::ready(crate::greet(&name))
+            .await
+            .map_err(|error| tinybus::Error::failed(error.to_string()))
     }
 }
 
