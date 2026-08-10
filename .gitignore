@@ -1,4 +1,23 @@
+# Build output
 /target/
 **/*.rs.bk
+*.pdb
+
+# Coverage output
+/coverage/
+*.profraw
+*.profdata
+lcov.info
+
+# Local secrets — never commit; copy .env.example to .env
 .env
+.env.local
+
+# Local worktrees created by the `worktree` helper
+/worktrees/
+
+# Editor and OS noise
 .DS_Store
+.idea/
+.vscode/
+*.swp
