@@ -1,3 +1,5 @@
+//! Crate-wide error and result types.
+
 /// Errors returned by this crate.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Error {
