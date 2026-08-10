@@ -4,12 +4,13 @@ version = "0.1.2"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-only"
-description = "A production-ready Rust library template."
+description = "A production-ready template for installable TinyBus modules."
 repository = "https://github.com/tinyhumansai/rust-template"
 documentation = "https://docs.rs/rust-template"
 readme = "README.md"
-keywords = ["template"]
+keywords = ["tinybus", "module", "plugin", "template"]
 categories = ["development-tools"]
+publish = false
 # Keep the published package to what a consumer actually needs.
 exclude = [
     ".github/",
@@ -21,12 +22,25 @@ exclude = [
     "deny.toml",
 ]
 
+[lib]
+# Keep the ordinary Rust library for tests and downstream reuse while also
+# producing the native module artifact that TinyBus loads at runtime.
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
+# TinyBus defines the message types, interface macro, and frozen module ABI used
+# by the generated integration. Socket and CLI features are unnecessary here.
+tinybus = { path = "vendor/tinybus/crates/tinybus", version = "0.1.0", default-features = false, features = ["macros"] }
+# The module-side SDK owns the isolated runtime and exports the ABI entrypoints
+# required by TinyBus's dynamic loader.
+tinybus-module = { path = "vendor/tinybus/crates/tinybus-module", version = "0.1.0" }
 # Derive macros for the crate-wide error type in `src/error/mod.rs`. Every
 # dependency entry should carry a comment like this one saying why it is here.
 thiserror = "2"
 
 [dev-dependencies]
+# Module integration tests exercise the real asynchronous in-memory TinyBus.
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = []

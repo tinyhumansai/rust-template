@@ -1,8 +1,9 @@
-//! A production-ready starting point for a Rust library.
+//! A production-ready starting point for an installable TinyBus module.
 //!
 //! This crate is a template. It ships the layout, lint configuration, error
-//! handling, testing, and documentation conventions described in `AGENTS.md`,
-//! plus one small feature module ([`greet`]) that demonstrates them end to end.
+//! handling, testing, and documentation conventions described in `AGENTS.md`.
+//! The compiled `cdylib` exports TinyBus module ABI v1 and serves the example
+//! [`greet`] behavior over the bus.
 //!
 //! # Layout
 //!
@@ -13,6 +14,8 @@
 //!   tests.
 //! - Every public item is re-exported from here, so downstream users have a
 //!   single predictable surface.
+//! - `tinybus_module` adapts the public behavior to TinyBus and exports the
+//!   module descriptor, embedded manifest, and initialization entrypoint.
 //!
 //! # Example
 //!
@@ -29,6 +32,7 @@
 
 mod error;
 mod greeting;
+mod tinybus_module;
 
 pub use error::{Error, Result};
 pub use greeting::greet;
