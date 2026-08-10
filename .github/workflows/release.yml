@@ -224,6 +224,31 @@ jobs:
       - name: Build installable module
         run: cargo build --locked --release --lib
 
+      - name: Verify Unix module through TinyBus loader
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        env:
+          CRATE_NAME: ${{ needs.prepare.outputs.crate_name }}
+        run: |
+          set -euo pipefail
+          library_name="${CRATE_NAME//-/_}"
+          case "$RUNNER_OS" in
+            Linux) module="target/release/lib${library_name}.so" ;;
+            macOS) module="target/release/lib${library_name}.dylib" ;;
+            *) echo "unsupported Unix runner: ${RUNNER_OS}" >&2; exit 1 ;;
+          esac
+          cargo run --locked --example verify_module -- "$module"
+
+      - name: Verify Windows module through TinyBus loader
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        env:
+          CRATE_NAME: ${{ needs.prepare.outputs.crate_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $libraryName = $env:CRATE_NAME.Replace('-', '_')
+          cargo run --locked --example verify_module -- "target/release/$libraryName.dll"
+
       - name: Assemble Unix module package
         if: ${{ runner.os != 'Windows' }}
         id: unix_package
@@ -375,6 +400,15 @@ jobs:
 
       - name: Build installable module
         run: cargo build --locked --release --lib
+
+      - name: Verify module through TinyBus loader
+        env:
+          CRATE_NAME: ${{ needs.prepare.outputs.crate_name }}
+        run: |
+          set -euo pipefail
+          library_name="${CRATE_NAME//-/_}"
+          cargo run --locked --example verify_module -- \
+            "target/release/lib${library_name}.so"
 
       - name: Assemble distribution module package
         id: package

@@ -30,7 +30,7 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 # TinyBus defines the message types, interface macro, and frozen module ABI used
 # by the generated integration. Socket and CLI features are unnecessary here.
-tinybus = { path = "vendor/tinybus/crates/tinybus", version = "0.1.0", default-features = false, features = ["macros"] }
+tinybus = { path = "vendor/tinybus/crates/tinybus", version = "0.1.0", default-features = false, features = ["macros", "modules"] }
 # The module-side SDK owns the isolated runtime and exports the ABI entrypoints
 # required by TinyBus's dynamic loader.
 tinybus-module = { path = "vendor/tinybus/crates/tinybus-module", version = "0.1.0" }
@@ -40,7 +40,7 @@ thiserror = "2"
 
 [dev-dependencies]
 # Module integration tests exercise the real asynchronous in-memory TinyBus.
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 [features]
 default = []
