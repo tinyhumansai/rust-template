@@ -230,10 +230,12 @@ explicitly declined with a reason.
 ## Releases
 
 Releases run from `.github/workflows/release.yml` via a manual
-`workflow_dispatch` with a `patch` / `minor` / `major` bump. The workflow
+`workflow_dispatch` with a `patch` / `minor` / `major` bump; `current` resumes
+an interrupted release after its version commit and tag exist. The workflow
 re-runs the full validation suite, computes the next version, updates
 `Cargo.toml` and `Cargo.lock`, commits and tags `vX.Y.Z`, packages, pushes, and
-publishes to crates.io using the `CARGO_REGISTRY_TOKEN` secret.
+publishes to crates.io when the Production environment provides the
+`CARGO_REGISTRY_TOKEN` secret.
 
 Consequently:
 

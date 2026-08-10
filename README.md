@@ -90,8 +90,10 @@ cargo install cargo-llvm-cov         # once, before running the coverage gate
 ## Releasing
 
 Run the **Release** workflow from the Actions tab with a `patch`, `minor`, or
-`major` bump. It revalidates the crate, bumps the version, commits, tags
-`vX.Y.Z`, publishes to crates.io, and creates a GitHub release. Release assets
+`major` bump. Use `current` only to resume an interrupted release whose version
+commit and tag already exist. The workflow revalidates the crate, versions and
+tags it, publishes to crates.io when the Production environment has a
+`CARGO_REGISTRY_TOKEN`, and creates a GitHub release. Release assets
 include the crate package, the pinned TinyBus source and module SDK, and native
 Linux and macOS bundles containing the TinyBus CLI, loadable modules, their
 SHA-256 `modules.toml` allowlist, and the protocol/module documentation. Do not
