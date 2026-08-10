@@ -1,4 +1,4 @@
-//! Downloads a tagged release asset and calls the loaded TinyBus module.
+//! Downloads a tagged release asset and calls the loaded `TinyBus` module.
 //!
 //! Run it with the release tag URL, platform archive, and archive SHA-256:
 //!
@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &release_url,
         &archive,
         Some(&sha256),
-        Default::default(),
+        serde_json::Value::default(),
     )?;
 
     if info.name != env!("CARGO_PKG_NAME") {
