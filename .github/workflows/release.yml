@@ -118,8 +118,13 @@ jobs:
               echo "Tag ${tag} already exists" >&2
               exit 1
             fi
-            if [[ "$(git rev-parse "${tag}^{commit}")" != "$(git rev-parse HEAD)" ]]; then
-              echo "Tag ${tag} does not point at the current commit" >&2
+            tagged_version="$(
+              git show "${tag}:Cargo.toml" \
+                | sed -n 's/^version = "\([^"]*\)"/\1/p' \
+                | head -n 1
+            )"
+            if [[ "$tagged_version" != "$current_version" ]]; then
+              echo "Tag ${tag} does not contain version ${current_version}" >&2
               exit 1
             fi
           fi
