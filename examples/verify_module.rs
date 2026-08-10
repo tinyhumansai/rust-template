@@ -4,10 +4,10 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::ModuleHost;
 use tinybus::transport::memory::MemoryBus;
-use tinybus::Connection;
 
 const INTERFACE: &str = "ai.tinyhumans.rust_template.Greeting";
 const OBJECT_PATH: &str = "/ai/tinyhumans/rust_template/Greeting";
@@ -51,16 +51,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
 
-    println!("verified {} as TinyBus module `{}`", module.display(), info.name);
+    println!(
+        "verified {} as TinyBus module `{}`",
+        module.display(),
+        info.name
+    );
     broker_task.abort();
     Ok(())
 }
 
 fn module_argument() -> Result<PathBuf, io::Error> {
-    std::env::args_os().nth(1).map(PathBuf::from).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "usage: cargo run --example verify_module -- <module-path>",
-        )
-    })
+    std::env::args_os()
+        .nth(1)
+        .map(PathBuf::from)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "usage: cargo run --example verify_module -- <module-path>",
+            )
+        })
 }
