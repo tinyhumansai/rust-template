@@ -1,0 +1,15 @@
+[package]
+name = "rust-template"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "A production-ready Rust library template."
+repository = "https://github.com/tinyhumansai/rust-template"
+readme = "README.md"
+keywords = ["template"]
+categories = ["development-tools"]
+
+[dependencies]
+thiserror = "2"
+
+[dev-dependencies]
