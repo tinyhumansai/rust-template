@@ -1,4 +1,4 @@
-//! Loads a built module through the real TinyBus dynamic loader.
+//! Loads a built module through the real `TinyBus` dynamic loader.
 
 use std::io;
 use std::path::PathBuf;
