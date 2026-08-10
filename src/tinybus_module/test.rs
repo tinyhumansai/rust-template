@@ -1,4 +1,4 @@
-//! Tests for the TinyBus module adapter and its declared surface.
+//! Tests for the `TinyBus` module adapter and its declared surface.
 
 use super::{GreetingService, INTERFACE, OBJECT_PATH, setup};
 use tinybus::broker::Broker;
@@ -22,7 +22,7 @@ async fn module_serves_greetings_over_a_real_bus() -> tinybus::Result<()> {
     Broker::new().spawn(bus.clone());
 
     let service = Connection::connect(bus.connect().await?).await?;
-    setup(service).await?;
+    setup(service.clone()).await?;
 
     let client = Connection::connect(bus.connect().await?).await?;
     let proxy = client.proxy(INTERFACE, OBJECT_PATH, INTERFACE)?;
@@ -38,12 +38,13 @@ async fn module_rejects_an_empty_name_over_the_bus() -> tinybus::Result<()> {
     Broker::new().spawn(bus.clone());
 
     let service = Connection::connect(bus.connect().await?).await?;
-    setup(service).await?;
+    setup(service.clone()).await?;
 
     let client = Connection::connect(bus.connect().await?).await?;
     let proxy = client.proxy(INTERFACE, OBJECT_PATH, INTERFACE)?;
     let result = proxy.call::<String>("Greet", ("   ",)).await;
 
-    assert!(result.is_err());
+    let error = result.expect_err("whitespace-only names must be rejected");
+    assert!(error.to_string().contains("name must not be empty"));
     Ok(())
 }
