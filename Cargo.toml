@@ -2,7 +2,7 @@
 name = "rust-template"
 version = "0.1.2"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "GPL-3.0-only"
 description = "A production-ready template for installable TinyBus modules."
 repository = "https://github.com/tinyhumansai/rust-template"
