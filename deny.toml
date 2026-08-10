@@ -10,13 +10,15 @@ all-features = true
 ignore = []
 
 [licenses]
-# Licenses accepted for dependencies. This crate itself is GPL-3.0-only; these
-# are the permissive licenses it is allowed to link against.
+# Licenses accepted for this crate and its dependencies. Keep GPL-3.0-only for
+# the template crate itself; the remaining entries cover compatible dependency
+# licenses commonly encountered by Rust projects.
 allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "GPL-3.0-only",
     "ISC",
     "MIT",
     "MPL-2.0",
