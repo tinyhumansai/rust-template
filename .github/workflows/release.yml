@@ -489,11 +489,41 @@ jobs:
       - distro-bundles
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
       - uses: actions/download-artifact@v4
         with:
           pattern: '*'
           path: release-assets
           merge-multiple: true
+
+      - name: Create release checksum manifest with TinyBus
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-assets/*.tar.gz release-assets/*.zip)
+          if [[ ${#assets[@]} -ne 16 ]]; then
+            echo "expected 16 module archives, found ${#assets[@]}" >&2
+            exit 1
+          fi
+
+          checksum_args=()
+          for asset in "${assets[@]}"; do
+            checksum_args+=(--path "$asset")
+          done
+          cargo run --manifest-path vendor/tinybus/Cargo.toml --locked \
+            --package tinybus --all-features --bin tinybus -- \
+            modules checksum "${checksum_args[@]}" \
+            --output release-assets/checksum.toml
 
       - name: Create immutable release with module packages
         env:
@@ -511,3 +541,29 @@ jobs:
               --title "$RELEASE_TAG" \
               --generate-notes
           fi
+
+      - name: Verify the published module through TinyBus
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+          CRATE_NAME: ${{ needs.prepare.outputs.crate_name }}
+          VERSION: ${{ needs.prepare.outputs.next_version }}
+        run: |
+          set -euo pipefail
+          archive="${CRATE_NAME}-${VERSION}-ubuntu-24.04-x86_64.tar.gz"
+          release_url="https://github.com/${REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          sha256="$(
+            sed -n "s/^\"${archive}\" = \"\([0-9a-f]\{64\}\)\"$/\1/p" \
+              release-assets/checksum.toml
+          )"
+          if [[ -z "$sha256" ]]; then
+            echo "checksum missing for ${archive}" >&2
+            exit 1
+          fi
+
+          cargo run --manifest-path vendor/tinybus/Cargo.toml --locked \
+            --package tinybus --all-features --example github_module_host -- \
+            "$release_url" "$archive" "$sha256"
+          cargo run --locked --example verify_github_release -- \
+            "$release_url" "$archive" "$sha256"

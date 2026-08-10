@@ -52,7 +52,9 @@ src/
 tests/
 └── public_api.rs       # integration tests against the public API only
 examples/
-└── basic.rs            # compiled and linted in CI
+├── basic.rs                    # ordinary library API usage
+├── verify_module.rs            # local dynamic-module verification
+└── verify_github_release.rs    # tagged-release download and bus call
 vendor/
 └── tinybus/            # pinned TinyBus git submodule
 docs/
@@ -101,8 +103,11 @@ commit and tag already exist. The workflow revalidates the crate, versions and
 tags it, builds this crate as a TinyBus `cdylib`, and creates a GitHub release.
 Assets follow `rust-template-<version>-<platform>.<tar.gz|zip>` and contain the
 native module, its SHA-256 `modules.toml`, license, and
-[`MODULE.md`](MODULE.md). TinyBus itself is not shipped by this repository; the
-pinned submodule is the build-time SDK. The stable native
+[`MODULE.md`](MODULE.md). Every release also publishes `checksum.toml`, which
+TinyBus uses to verify an archive before extraction. The workflow loads the
+published Ubuntu archive through TinyBus's GitHub release API and calls its
+`Greet` method before declaring the release successful. TinyBus itself is not
+shipped by this repository; the pinned submodule is the build-time SDK. The stable native
 matrix covers Ubuntu 22.04 and 24.04 on x86_64 and ARM64; Fedora 43 and 44 on
 x86_64 and ARM64; rolling Arch Linux on its officially supported x86_64
 architecture; macOS 15 and 26 on Intel and Apple Silicon; Windows Server 2022
