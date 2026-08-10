@@ -28,6 +28,11 @@ docs/
 Complex modules also carry a module-level `README.md` inside `src/<module>/`
 covering their design, public surface, and important constraints.
 
+The current module-release contract is in
+[`specs/tinybus-module-release.md`](specs/tinybus-module-release.md), with its
+implementation sequence in
+[`plans/tinybus-module-release.md`](plans/tinybus-module-release.md).
+
 ## Conventions
 
 - Keep every Markdown file at 500 lines or fewer. When a topic outgrows that,

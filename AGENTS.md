@@ -141,7 +141,8 @@ reproducible.
 ### Vendored dependencies
 
 TinyBus is registered as the `vendor/tinybus` git submodule and pinned by its
-gitlink. Initialize it after cloning with:
+gitlink. It supplies the host types and module-side SDK required to build this
+crate's `cdylib`. Initialize it after cloning with:
 
 ```sh
 git submodule update --init --recursive
@@ -149,9 +150,8 @@ git submodule update --init --recursive
 
 Do not edit vendored code from the parent repository. Make TinyBus changes in
 its own repository, push them there, then update this repository's gitlink in a
-separate commit. If the generated project consumes TinyBus, use the exact crate
-path and minimal features it needs; the template does not force that dependency
-on every generated crate.
+separate commit. Keep the exact path dependencies and minimal features unless a
+new module capability requires more.
 
 ## Testing
 
@@ -168,9 +168,9 @@ on every generated crate.
 - Tests must be deterministic and independent of network, wall-clock time, and
   execution order. Gate any live/network test behind a feature or an env var and
   name it `live_*` so it is easy to exclude.
-- Maintain at least 80% coverage of meaningful library behavior. Add or update
-  tests with every behavior change, and note any deliberately untested edge case
-  in the pull request description.
+- Maintain at least 90% line coverage in every source file. Add or update tests
+  with every behavior change, and note any deliberately untested edge case in
+  the pull request description.
 
 Write the test first when fixing a bug: a failing test that reproduces the
 report, then the fix that turns it green.
@@ -234,9 +234,9 @@ Releases run from `.github/workflows/release.yml` via a manual
 `workflow_dispatch` with a `patch` / `minor` / `major` bump; `current` resumes
 an interrupted release after its version commit and tag exist. The workflow
 re-runs the full validation suite, computes the next version, updates
-`Cargo.toml` and `Cargo.lock`, commits and tags `vX.Y.Z`, packages, pushes, and
-publishes to crates.io when the Production environment provides the
-`CARGO_REGISTRY_TOKEN` secret.
+`Cargo.toml` and `Cargo.lock`, commits and tags `vX.Y.Z`, builds the TinyBus
+module for every supported platform, pushes, and creates an immutable GitHub
+release with installable native packages.
 
 Consequently:
 
@@ -245,7 +245,8 @@ Consequently:
 - Follow semantic versioning. Any change to the public surface that is not
   purely additive is a breaking change and needs a major bump (pre-1.0: a minor
   bump).
-- The crate must be publishable at all times — `main` should always be green.
+- The module must be packageable for every release target — `main` should
+  always be green.
 
 ## Agent Working Agreement
 
