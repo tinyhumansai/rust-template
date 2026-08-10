@@ -217,6 +217,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
+          - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -231,14 +232,24 @@ jobs:
         with:
           workspaces: vendor/tinybus -> target
 
-      - name: Build TinyBus and loadable modules
+      - name: Build TinyBus CLI and loadable modules
+        if: ${{ runner.os != 'Windows' }}
         working-directory: vendor/tinybus
         run: >-
           cargo build --locked --release --package tinybus --all-features
           --bin tinybus --example module_clock --example module_clock_two
 
-      - name: Assemble native bundle
-        id: bundle
+      - name: Build TinyBus library and loadable modules
+        if: ${{ runner.os == 'Windows' }}
+        working-directory: vendor/tinybus
+        run: >-
+          cargo build --locked --release --package tinybus
+          --no-default-features --features modules,macros
+          --example module_clock --example module_clock_two
+
+      - name: Assemble Unix bundle
+        if: ${{ runner.os != 'Windows' }}
+        id: bundle_unix
         shell: bash
         env:
           TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
@@ -280,11 +291,70 @@ jobs:
           tar -C dist -czf "dist/${bundle_name}.tar.gz" "$bundle_name"
           echo "archive=dist/${bundle_name}.tar.gz" >> "$GITHUB_OUTPUT"
 
-      - name: Upload native bundle
+      - name: Assemble Windows bundle
+        if: ${{ runner.os == 'Windows' }}
+        id: bundle_windows
+        shell: pwsh
+        env:
+          TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $targetTriple = (rustc -vV | Select-String '^host: ').Line.Substring(6)
+          $bundleName = "tinybus-$env:TINYBUS_VERSION-$targetTriple"
+          $bundleRoot = "dist/$bundleName"
+          $moduleRoot = "$bundleRoot/modules"
+          New-Item -ItemType Directory -Force $moduleRoot, "$bundleRoot/docs" | Out-Null
+
+          $moduleClock = 'vendor/tinybus/target/release/examples/module_clock.dll'
+          $moduleClockTwo = 'vendor/tinybus/target/release/examples/module_clock_two.dll'
+          foreach ($module in @($moduleClock, $moduleClockTwo)) {
+            if (-not (Test-Path -LiteralPath $module -PathType Leaf)) {
+              throw "a TinyBus module artifact is missing: $module"
+            }
+            Copy-Item -LiteralPath $module -Destination $moduleRoot
+          }
+
+          $allowlist = foreach ($module in Get-ChildItem -LiteralPath $moduleRoot -Filter '*.dll') {
+            $hash = (Get-FileHash -LiteralPath $module.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            '"{0}" = "{1}"' -f $module.Name, $hash
+          }
+          $utf8 = [System.Text.UTF8Encoding]::new($false)
+          [System.IO.File]::WriteAllLines("$moduleRoot/modules.toml", $allowlist, $utf8)
+
+          Copy-Item -LiteralPath @(
+            'vendor/tinybus/LICENSE',
+            'vendor/tinybus/README.md'
+          ) -Destination $bundleRoot
+          Copy-Item -LiteralPath 'vendor/tinybus/docs/protocol.md' -Destination "$bundleRoot/docs"
+          Copy-Item -LiteralPath 'vendor/tinybus/docs/modules' -Destination "$bundleRoot/docs/modules" -Recurse
+          $windowsNote = @(
+            'TinyBus Windows module bundle',
+            '',
+            'This bundle contains the in-process module DLLs and SHA-256 allowlist.',
+            'The TinyBus CLI is not included because its production transport uses',
+            'Unix-domain sockets; Windows named-pipe support is not implemented yet.'
+          )
+          [System.IO.File]::WriteAllLines("$bundleRoot/WINDOWS.md", $windowsNote, $utf8)
+
+          $archive = "dist/$bundleName.zip"
+          Compress-Archive -Path $bundleRoot -DestinationPath $archive
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Unix bundle
+        if: ${{ runner.os != 'Windows' }}
         uses: actions/upload-artifact@v4
         with:
           name: tinybus-${{ runner.os }}
-          path: ${{ steps.bundle.outputs.archive }}
+          path: ${{ steps.bundle_unix.outputs.archive }}
+          if-no-files-found: error
+
+      - name: Upload Windows bundle
+        if: ${{ runner.os == 'Windows' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinybus-${{ runner.os }}
+          path: ${{ steps.bundle_windows.outputs.archive }}
           if-no-files-found: error
 
   github-release:
@@ -300,14 +370,21 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Create release and upload assets
+      - name: Create or update release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
-        run: >-
-          gh release create "$RELEASE_TAG" release-assets/*
-          --repo "$REPOSITORY"
-          --verify-tag
-          --title "$RELEASE_TAG"
-          --generate-notes
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* \
+              --repo "$REPOSITORY" \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --repo "$REPOSITORY" \
+              --verify-tag \
+              --title "$RELEASE_TAG" \
+              --generate-notes
+          fi

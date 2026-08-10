@@ -94,10 +94,12 @@ Run the **Release** workflow from the Actions tab with a `patch`, `minor`, or
 commit and tag already exist. The workflow revalidates the crate, versions and
 tags it, publishes to crates.io when the Production environment has a
 `CARGO_REGISTRY_TOKEN`, and creates a GitHub release. Release assets
-include the crate package, the pinned TinyBus source and module SDK, and native
-Linux and macOS bundles containing the TinyBus CLI, loadable modules, their
-SHA-256 `modules.toml` allowlist, and the protocol/module documentation. Do not
-hand-edit the version in `Cargo.toml`.
+include the crate package, the pinned TinyBus source and module SDK, Linux and
+macOS bundles containing the TinyBus CLI and loadable modules, and a Windows
+bundle containing the supported in-process module DLLs. Every native bundle
+includes a SHA-256 `modules.toml` allowlist and protocol/module documentation.
+The Windows bundle omits the CLI until TinyBus has a named-pipe transport. Do
+not hand-edit the version in `Cargo.toml`.
 
 ## Documentation
 
