@@ -1,40 +1,60 @@
 # Rust Template
 
-A production-ready Rust 2024 library template used by TinyHumans AI.
+A production-ready Rust 2024 library template used by TinyHumans AI. It ships
+the module layout, lint configuration, error handling, testing, documentation,
+CI, and release workflow that every new crate in this organization starts from —
+plus one small feature module that demonstrates the conventions end to end.
 
-## Use this template
+## Use This Template
 
-Choose **Use this template** on GitHub, create a repository, then update:
+Choose **Use this template** on GitHub, create a repository, then work through
+the checklist at the top of [`AGENTS.md`](AGENTS.md):
 
-- the package name, description, repository, keywords, and categories in `Cargo.toml`;
-- this README and the package-level documentation in `src/lib.rs`;
-- the security contact and repository links in the community files;
-- the license if GPL-3.0-only is not appropriate for the new project.
+- update the package name, description, repository, keywords, and categories in
+  `Cargo.toml`;
+- update this README and the crate documentation in `src/lib.rs`;
+- replace the placeholder `greeting` module with the first real feature area;
+- update the security contact and repository links in the community files;
+- replace `ROADMAP.md` with the real plan, or delete it;
+- change the license if GPL-3.0-only is not appropriate.
 
-Search for `rust-template` and `tinyhumansai/rust-template` to find the remaining
-template-specific values.
+Search for `rust-template` and `rust_template` to find every remaining
+template-specific value.
+
+## What You Get
+
+| Area | What is configured |
+| --- | --- |
+| Layout | Directory modules with `mod.rs` / `types.rs` / `test.rs`, a crate-wide error type, integration tests, and a runnable example |
+| Lints | `unsafe_code` forbidden, `missing_docs`, clippy `all` + `pedantic`, no `unwrap`/`expect`/`panic`/`todo` in library code — all declared in `[lints]` so local and CI runs agree |
+| CI | Format, clippy, build, test (default and all features), rustdoc with `-D warnings`, an MSRV build, and a `cargo-deny` supply-chain check |
+| Release | Manual `workflow_dispatch` bump that validates, versions, tags, and publishes to crates.io |
+| Community | Issue and pull request templates, Dependabot, contributing, security, support, and code of conduct docs |
+| Agents | [`AGENTS.md`](AGENTS.md) as the single source of truth, symlinked as `CLAUDE.md`, plus a `.claude/settings.json` allowlist for the standard commands |
 
 ## Layout
 
 ```text
 src/
-├── lib.rs
+├── lib.rs              # crate docs + the entire public re-export surface
 ├── error/
-│   └── mod.rs
-└── greeting/
-    ├── mod.rs
-    └── test.rs
+│   ├── mod.rs          # crate-wide `Error` and `Result<T>`
+│   └── test.rs
+└── greeting/           # one directory per feature area
+    ├── mod.rs          # module docs, wiring, smallest useful public API
+    └── test.rs         # module-local unit tests
 tests/
-└── public_api.rs
+└── public_api.rs       # integration tests against the public API only
 examples/
-└── basic.rs
+└── basic.rs            # compiled and linted in CI
+docs/
+└── README.md           # architecture notes, specs, and ADRs
 ```
 
-Feature areas use directory modules. Their implementation and exports live in
-`mod.rs`, substantial types can move to `types.rs`, and unit tests live in
-`test.rs`. `AGENTS.md` contains the complete repository guidance, while
-`CLAUDE.md` points to the same instructions so coding agents share one source of
-truth.
+Feature areas use directory modules: implementation and exports live in
+`mod.rs`, substantial types move to `types.rs`, and unit tests live in
+`test.rs`. [`AGENTS.md`](AGENTS.md) holds the complete repository guidance, and
+`CLAUDE.md` is a symlink to it so every coding agent reads one source of truth.
 
 ## Development
 
@@ -45,6 +65,27 @@ cargo build --all-targets --all-features
 cargo test --all-features
 cargo run --example basic
 ```
+
+Those four checks are exactly what CI runs. Optional extras:
+
+```sh
+cargo doc --no-deps --all-features   # CI builds this with RUSTDOCFLAGS="-D warnings"
+cargo deny check all                 # supply-chain check; see deny.toml
+```
+
+## Releasing
+
+Run the **Release** workflow from the Actions tab with a `patch`, `minor`, or
+`major` bump. It revalidates the crate, bumps the version, commits, tags
+`vX.Y.Z`, and publishes to crates.io. Do not hand-edit the version in
+`Cargo.toml`.
+
+## Documentation
+
+- [`AGENTS.md`](AGENTS.md) — repository guidelines for humans and agents
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to propose a change
+- [`docs/`](docs/README.md) — architecture notes and decision records
+- [`SECURITY.md`](SECURITY.md) — how to report a vulnerability
 
 ## License
 
