@@ -1,9 +1,9 @@
 # Rust Template
 
-A production-ready Rust 2024 library template used by TinyHumans AI. It ships
-the module layout, lint configuration, error handling, testing, documentation,
-CI, and release workflow that every new crate in this organization starts from —
-plus one small feature module that demonstrates the conventions end to end.
+A production-ready Rust 2024 TinyBus module template used by TinyHumans AI. It
+ships the module layout, TinyBus ABI adapter, error handling, testing,
+documentation, CI, and multi-platform release workflow that every new
+integration in this organization starts from.
 
 ## Use This Template
 
@@ -14,6 +14,8 @@ the checklist at the top of [`AGENTS.md`](AGENTS.md):
   `Cargo.toml`;
 - update this README and the crate documentation in `src/lib.rs`;
 - replace the placeholder `greeting` module with the first real feature area;
+- rename the TinyBus interface, object path, and exported methods in
+  `src/tinybus_module/`;
 - update the security contact and repository links in the community files;
 - replace `ROADMAP.md` with the real plan, or delete it;
 - change the license if GPL-3.0-only is not appropriate.
@@ -28,10 +30,10 @@ template-specific value.
 | Layout | Directory modules with `mod.rs` / `types.rs` / `test.rs`, a crate-wide error type, integration tests, and a runnable example |
 | Lints | `unsafe_code` forbidden, `missing_docs`, clippy `all` + `pedantic`, no `unwrap`/`expect`/`panic`/`todo` in library code — all declared in `[lints]` so local and CI runs agree |
 | CI | Format, clippy, build, test (default and all features), at least 90% line coverage in every source file, rustdoc with `-D warnings`, an MSRV build, and a `cargo-deny` supply-chain check |
-| Release | Manual `workflow_dispatch` bump that validates, versions, tags, publishes to crates.io, and creates a GitHub release with crate and TinyBus assets |
+| Release | Manual `workflow_dispatch` bump that validates, versions, tags, and creates installable native module packages for every supported platform |
 | Community | Issue and pull request templates, Dependabot, contributing, security, support, and code of conduct docs |
 | Agents | [`AGENTS.md`](AGENTS.md) as the single source of truth, symlinked as `CLAUDE.md`, plus a `.claude/settings.json` allowlist for the standard commands |
-| Vendor | TinyBus pinned as the `vendor/tinybus` submodule, initialized by CI and release workflows |
+| Vendor | TinyBus host types and module SDK pinned as the `vendor/tinybus` build-time submodule |
 
 ## Layout
 
@@ -41,9 +43,12 @@ src/
 ├── error/
 │   ├── mod.rs          # crate-wide `Error` and `Result<T>`
 │   └── test.rs
-└── greeting/           # one directory per feature area
+├── greeting/           # one directory per feature area
     ├── mod.rs          # module docs, wiring, smallest useful public API
     └── test.rs         # module-local unit tests
+└── tinybus_module/
+    ├── mod.rs          # bus interface, setup, and ABI v1 exports
+    └── test.rs         # real in-memory TinyBus integration tests
 tests/
 └── public_api.rs       # integration tests against the public API only
 examples/
@@ -76,6 +81,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
 cargo test --all-features
 cargo run --example basic
+cargo build --release --lib            # produces the installable cdylib
 ```
 
 Those four checks are exactly what CI runs. Optional extras:
@@ -92,19 +98,17 @@ cargo install cargo-llvm-cov         # once, before running the coverage gate
 Run the **Release** workflow from the Actions tab with a `patch`, `minor`, or
 `major` bump. Use `current` only to resume an interrupted release whose version
 commit and tag already exist. The workflow revalidates the crate, versions and
-tags it, publishes to crates.io when the Production environment has a
-`CARGO_REGISTRY_TOKEN`, and creates a GitHub release. Release assets
-include the crate package, the pinned TinyBus source and module SDK, Linux and
-macOS bundles containing the TinyBus CLI and loadable modules, and Windows
-bundles containing the supported in-process module DLLs. The stable native
+tags it, builds this crate as a TinyBus `cdylib`, and creates a GitHub release.
+Assets follow `rust-template-<version>-<platform>.<tar.gz|zip>` and contain the
+native module, its SHA-256 `modules.toml`, license, and
+[`MODULE.md`](MODULE.md). TinyBus itself is not shipped by this repository; the
+pinned submodule is the build-time SDK. The stable native
 matrix covers Ubuntu 22.04 and 24.04 on x86_64 and ARM64; Fedora 43 and 44 on
 x86_64 and ARM64; rolling Arch Linux on its officially supported x86_64
 architecture; macOS 15 and 26 on Intel and Apple Silicon; Windows Server 2022
-and 2025 on x86_64; and Windows 11 on ARM64. Every bundle includes a SHA-256
-`modules.toml` allowlist and protocol/module documentation. Windows bundles
-omit the CLI until TinyBus has a named-pipe transport. Preview, deprecated, and
-unofficial architecture images are not release gates. Do not hand-edit the
-version in `Cargo.toml`.
+and 2025 on x86_64; and Windows 11 on ARM64. Preview, deprecated, and unofficial
+architecture images are not release gates. Do not hand-edit the version in
+`Cargo.toml`.
 
 ## Documentation
 
