@@ -27,7 +27,16 @@ pub const CONTRACT_VERSION: (u32, u32) = (1, 0);
 /// ```
 #[must_use]
 pub fn is_compatible(module: (u32, u32)) -> bool {
-    let (host_major, host_minor) = CONTRACT_VERSION;
+    binds(CONTRACT_VERSION, module)
+}
+
+/// The bind rule with the host version supplied explicitly.
+///
+/// [`is_compatible`] is this function applied to [`CONTRACT_VERSION`]. It is
+/// split out so the unit tests can exercise both directions of the comparison
+/// without pinning them to whatever the shipped version happens to be.
+fn binds(host: (u32, u32), module: (u32, u32)) -> bool {
+    let (host_major, host_minor) = host;
     let (module_major, module_minor) = module;
 
     module_major == host_major && module_minor >= host_minor
