@@ -244,7 +244,7 @@ jobs:
           fi
 
       - name: Build installable module
-        run: cargo build --locked --release --lib --package "$RELEASE_PACKAGE"
+        run: cargo build --locked --release --lib --package ${{ env.RELEASE_PACKAGE }}
 
       - name: Verify Unix module through TinyBus loader
         if: ${{ runner.os != 'Windows' }}
@@ -452,7 +452,7 @@ jobs:
           fi
 
       - name: Build installable module
-        run: cargo build --locked --release --lib --package "$RELEASE_PACKAGE"
+        run: cargo build --locked --release --lib --package ${{ env.RELEASE_PACKAGE }}
 
       - name: Verify module through TinyBus loader
         env:
