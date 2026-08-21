@@ -7,7 +7,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use rust_template::{Error, greet};
+use template::{Error, greet};
 
 #[test]
 fn greeting_is_available_to_consumers() {

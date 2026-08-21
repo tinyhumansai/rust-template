@@ -9,8 +9,8 @@ use tinybus::broker::Broker;
 use tinybus::module::ModuleHost;
 use tinybus::transport::memory::MemoryBus;
 
-const INTERFACE: &str = "ai.tinyhumans.rust_template.Greeting";
-const OBJECT_PATH: &str = "/ai/tinyhumans/rust_template/Greeting";
+const INTERFACE: &str = "ai.tinyhumans.template.Greeting";
+const OBJECT_PATH: &str = "/ai/tinyhumans/template/Greeting";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

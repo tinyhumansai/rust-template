@@ -4,8 +4,8 @@
 //!
 //! ```text
 //! cargo run --example verify_github_release -- \
-//!   https://github.com/tinyhumansai/rust-template/releases/tag/v0.1.4 \
-//!   rust-template-0.1.4-ubuntu-24.04-x86_64.tar.gz \
+//!   https://github.com/tinyhumansai/template/releases/tag/v0.1.4 \
+//!   template-0.1.4-ubuntu-24.04-x86_64.tar.gz \
 //!   <sha256>
 //! ```
 
@@ -17,8 +17,8 @@ use tinybus::broker::Broker;
 use tinybus::module::ModuleHost;
 use tinybus::transport::memory::MemoryBus;
 
-const INTERFACE: &str = "ai.tinyhumans.rust_template.Greeting";
-const OBJECT_PATH: &str = "/ai/tinyhumans/rust_template/Greeting";
+const INTERFACE: &str = "ai.tinyhumans.template.Greeting";
+const OBJECT_PATH: &str = "/ai/tinyhumans/template/Greeting";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
