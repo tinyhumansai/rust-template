@@ -20,6 +20,16 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # The workspace member that ships as the loadable module. Its package name is
+  # the artifact name and the library name; `crates/template-bus` rides along on
+  # the same inherited version and is not packaged separately.
+  RELEASE_PACKAGE: template
+
+# Third-party actions are pinned to a commit SHA with the release tag in a
+# trailing comment. A tag is a mutable ref, and this workflow holds write
+# permission on the repository — update the SHA and the comment together.
+
 jobs:
   prepare:
     name: Prepare release
@@ -30,18 +40,20 @@ jobs:
       next_version: ${{ steps.version.outputs.next_version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          submodules: true
+          submodules: recursive
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           components: rustfmt, clippy
 
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@a2a5f6e99e1a31540baa0468acfa302cff0f359f # v2.86.4
+        with:
+          tool: cargo-llvm-cov
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -70,8 +82,10 @@ jobs:
           set -euo pipefail
 
           metadata="$(cargo metadata --format-version 1 --no-deps)"
-          crate_name="$(jq -r '.packages[0].name' <<< "$metadata")"
-          current_version="$(jq -r '.packages[0].version' <<< "$metadata")"
+          crate_name="$(jq -r --arg name "$RELEASE_PACKAGE" \
+            '.packages[] | select(.name == $name) | .name' <<< "$metadata")"
+          current_version="$(jq -r --arg name "$RELEASE_PACKAGE" \
+            '.packages[] | select(.name == $name) | .version' <<< "$metadata")"
           if [[ -z "$crate_name" || "$crate_name" == "null" ]]; then
             echo "Could not resolve the crate name" >&2
             exit 1
@@ -114,7 +128,7 @@ jobs:
             fi
             tagged_version="$(
               git show "${tag}:Cargo.toml" \
-                | sed -n 's/^version = "\([^"]*\)"/\1/p' \
+                | sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\([^"]*\)"/\1/p' \
                 | head -n 1
             )"
             if [[ "$tagged_version" != "$current_version" ]]; then
@@ -140,8 +154,20 @@ jobs:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
         run: |
           set -euo pipefail
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
-          cargo update -p "$CRATE_NAME" --precise "$NEXT_VERSION"
+          # One version for the whole workspace: every member inherits it with
+          # `version.workspace = true`, so this is the only edit needed.
+          perl -0pi -e 's/(\[workspace\.package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
+          # `--workspace` re-resolves the local packages only, which is what a
+          # version bump changes. `-p <name> --precise` cannot express "and the
+          # other member moved too".
+          cargo update --workspace
+          released="$(cargo metadata --format-version 1 --no-deps \
+            | jq -r --arg name "$CRATE_NAME" \
+              '.packages[] | select(.name == $name) | .version')"
+          if [[ "$released" != "$NEXT_VERSION" ]]; then
+            echo "version bump did not take: expected ${NEXT_VERSION}, got ${released}" >&2
+            exit 1
+          fi
 
       - name: Commit version bump and tag
         if: ${{ inputs.bump != 'current' }}
@@ -199,15 +225,15 @@ jobs:
             target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Verify native Rust target
         shell: bash
@@ -222,7 +248,7 @@ jobs:
           fi
 
       - name: Build installable module
-        run: cargo build --locked --release --lib
+        run: cargo build --locked --release --lib --package "$RELEASE_PACKAGE"
 
       - name: Verify Unix module through TinyBus loader
         if: ${{ runner.os != 'Windows' }}
@@ -237,7 +263,7 @@ jobs:
             macOS) module="target/release/lib${library_name}.dylib" ;;
             *) echo "unsupported Unix runner: ${RUNNER_OS}" >&2; exit 1 ;;
           esac
-          cargo run --locked --example verify_module -- "$module"
+          cargo run --locked --package template --example verify_module -- "$module"
 
       - name: Verify Windows module through TinyBus loader
         if: ${{ runner.os == 'Windows' }}
@@ -248,7 +274,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $libraryName = $env:CRATE_NAME.Replace('-', '_')
           $module = "target/release/$libraryName.dll"
-          $verifyRoot = Join-Path $env:RUNNER_TEMP 'rust-template-module-verify'
+          $verifyRoot = Join-Path $env:RUNNER_TEMP 'template-module-verify'
           New-Item -ItemType Directory -Force $verifyRoot | Out-Null
 
           $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -278,7 +304,7 @@ jobs:
 
           $verifiedModule = Join-Path $verifyRoot "$libraryName.dll"
           Copy-Item -LiteralPath $module -Destination $verifiedModule
-          cargo run --locked --example verify_module -- $verifiedModule
+          cargo run --locked --package template --example verify_module -- $verifiedModule
 
       - name: Assemble Unix module package
         if: ${{ runner.os != 'Windows' }}
@@ -353,7 +379,7 @@ jobs:
 
       - name: Upload Unix package
         if: ${{ runner.os != 'Windows' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ needs.prepare.outputs.crate_name }}-${{ matrix.id }}
           path: ${{ steps.unix_package.outputs.archive }}
@@ -361,7 +387,7 @@ jobs:
 
       - name: Upload Windows package
         if: ${{ runner.os == 'Windows' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ needs.prepare.outputs.crate_name }}-${{ matrix.id }}
           path: ${{ steps.windows_package.outputs.archive }}
@@ -410,13 +436,13 @@ jobs:
         if: ${{ matrix.family == 'archlinux' }}
         run: pacman -Syu --noconfirm base-devel git
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
 
       - name: Verify native Rust target
         env:
@@ -430,7 +456,7 @@ jobs:
           fi
 
       - name: Build installable module
-        run: cargo build --locked --release --lib
+        run: cargo build --locked --release --lib --package "$RELEASE_PACKAGE"
 
       - name: Verify module through TinyBus loader
         env:
@@ -441,7 +467,7 @@ jobs:
           verify_root="/opt/${CRATE_NAME}-module-verify"
           install -d -m 700 "$verify_root"
           install -m 755 "target/release/lib${library_name}.so" "$verify_root/"
-          cargo run --locked --example verify_module -- \
+          cargo run --locked --package template --example verify_module -- \
             "$verify_root/lib${library_name}.so"
 
       - name: Assemble distribution module package
@@ -475,7 +501,7 @@ jobs:
           echo "archive=dist/${package_name}.tar.gz" >> "$GITHUB_OUTPUT"
 
       - name: Upload distribution package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ needs.prepare.outputs.crate_name }}-${{ matrix.id }}
           path: ${{ steps.package.outputs.archive }}
@@ -489,17 +515,17 @@ jobs:
       - distro-bundles
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: '*'
           path: release-assets
@@ -565,5 +591,5 @@ jobs:
           cargo run --manifest-path vendor/tinybus/Cargo.toml --locked \
             --package tinybus --all-features --example github_module_host -- \
             "$release_url" "$archive" "$sha256"
-          cargo run --locked --example verify_github_release -- \
+          cargo run --locked --package template --example verify_github_release -- \
             "$release_url" "$archive" "$sha256"
