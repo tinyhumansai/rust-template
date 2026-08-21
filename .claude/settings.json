@@ -8,7 +8,7 @@
       "Bash(cargo check:*)",
       "Bash(cargo test:*)",
       "Bash(cargo doc:*)",
-      "Bash(cargo run --example:*)",
+      "Bash(cargo run:*)",
       "Bash(cargo tree:*)",
       "Bash(cargo metadata:*)",
       "Bash(cargo deny check:*)",

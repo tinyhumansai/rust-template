@@ -4,10 +4,14 @@ set -euo pipefail
 minimum="${1:-90}"
 report="${2:-coverage.json}"
 workspace_root="$(pwd -P)/"
-source_root="${workspace_root}src/"
+# Every crate lives under `crates/<package>/src/`, so one prefix covers the
+# whole workspace. Vendored submodules and `worktrees/` sit outside it and are
+# excluded by the same test.
+source_root="${workspace_root}crates/"
 
 cargo llvm-cov \
   --locked \
+  --workspace \
   --all-targets \
   --all-features \
   --json \
@@ -23,7 +27,7 @@ covered_files="$(jq --arg source_root "$source_root" '
 ' "$report")"
 
 if [[ "$covered_files" -eq 0 ]]; then
-  echo "coverage report contains no files with executable lines under src/" >&2
+  echo "coverage report contains no files with executable lines under crates/" >&2
   exit 1
 fi
 

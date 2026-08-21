@@ -4,21 +4,19 @@
 //!
 //! ```text
 //! cargo run --example verify_github_release -- \
-//!   https://github.com/tinyhumansai/rust-template/releases/tag/v0.1.4 \
-//!   rust-template-0.1.4-ubuntu-24.04-x86_64.tar.gz \
+//!   https://github.com/tinyhumansai/template/releases/tag/v0.1.4 \
+//!   template-0.1.4-ubuntu-24.04-x86_64.tar.gz \
 //!   <sha256>
 //! ```
 
 use std::io;
 use std::time::Duration;
 
+use template::{GreetRequest, GreetResponse, names};
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::ModuleHost;
 use tinybus::transport::memory::MemoryBus;
-
-const INTERFACE: &str = "ai.tinyhumans.rust_template.Greeting";
-const OBJECT_PATH: &str = "/ai/tinyhumans/rust_template/Greeting";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,8 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Connection::connect(bus.connect().await?).await?;
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let names = client.list_names().await?;
-            if names.iter().any(|name| name.as_str() == INTERFACE) {
+            let claimed = client.list_names().await?;
+            if claimed.iter().any(|name| name.as_str() == names::INTERFACE) {
                 return tinybus::Result::Ok(());
             }
             tokio::task::yield_now().await;
@@ -55,11 +53,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })
     .await??;
 
-    let proxy = client.proxy(INTERFACE, OBJECT_PATH, INTERFACE)?;
-    let greeting: String = proxy.call("Greet", ("TinyBus",)).await?;
-    if greeting != "Hello, TinyBus!" {
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let reply: GreetResponse = proxy
+        .call(names::methods::GREET, (GreetRequest::new("TinyBus"),))
+        .await?;
+    if reply.greeting != "Hello, TinyBus!" {
         return Err(io::Error::other(format!(
-            "module returned an unexpected greeting: {greeting}"
+            "module returned an unexpected greeting: {}",
+            reply.greeting
         ))
         .into());
     }

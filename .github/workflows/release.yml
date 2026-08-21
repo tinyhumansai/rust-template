@@ -20,6 +20,12 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # The workspace member that ships as the loadable module. Its package name is
+  # the artifact name and the library name; `crates/template-bus` rides along on
+  # the same inherited version and is not packaged separately.
+  RELEASE_PACKAGE: template
+
 jobs:
   prepare:
     name: Prepare release
@@ -33,13 +39,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          submodules: true
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
 
       - uses: Swatinem/rust-cache@v2
 
@@ -70,8 +78,10 @@ jobs:
           set -euo pipefail
 
           metadata="$(cargo metadata --format-version 1 --no-deps)"
-          crate_name="$(jq -r '.packages[0].name' <<< "$metadata")"
-          current_version="$(jq -r '.packages[0].version' <<< "$metadata")"
+          crate_name="$(jq -r --arg name "$RELEASE_PACKAGE" \
+            '.packages[] | select(.name == $name) | .name' <<< "$metadata")"
+          current_version="$(jq -r --arg name "$RELEASE_PACKAGE" \
+            '.packages[] | select(.name == $name) | .version' <<< "$metadata")"
           if [[ -z "$crate_name" || "$crate_name" == "null" ]]; then
             echo "Could not resolve the crate name" >&2
             exit 1
@@ -114,7 +124,7 @@ jobs:
             fi
             tagged_version="$(
               git show "${tag}:Cargo.toml" \
-                | sed -n 's/^version = "\([^"]*\)"/\1/p' \
+                | sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\([^"]*\)"/\1/p' \
                 | head -n 1
             )"
             if [[ "$tagged_version" != "$current_version" ]]; then
@@ -140,8 +150,20 @@ jobs:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
         run: |
           set -euo pipefail
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
-          cargo update -p "$CRATE_NAME" --precise "$NEXT_VERSION"
+          # One version for the whole workspace: every member inherits it with
+          # `version.workspace = true`, so this is the only edit needed.
+          perl -0pi -e 's/(\[workspace\.package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
+          # `--workspace` re-resolves the local packages only, which is what a
+          # version bump changes. `-p <name> --precise` cannot express "and the
+          # other member moved too".
+          cargo update --workspace
+          released="$(cargo metadata --format-version 1 --no-deps \
+            | jq -r --arg name "$CRATE_NAME" \
+              '.packages[] | select(.name == $name) | .version')"
+          if [[ "$released" != "$NEXT_VERSION" ]]; then
+            echo "version bump did not take: expected ${NEXT_VERSION}, got ${released}" >&2
+            exit 1
+          fi
 
       - name: Commit version bump and tag
         if: ${{ inputs.bump != 'current' }}
@@ -203,7 +225,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -222,7 +244,7 @@ jobs:
           fi
 
       - name: Build installable module
-        run: cargo build --locked --release --lib
+        run: cargo build --locked --release --lib --package ${{ env.RELEASE_PACKAGE }}
 
       - name: Verify Unix module through TinyBus loader
         if: ${{ runner.os != 'Windows' }}
@@ -237,7 +259,7 @@ jobs:
             macOS) module="target/release/lib${library_name}.dylib" ;;
             *) echo "unsupported Unix runner: ${RUNNER_OS}" >&2; exit 1 ;;
           esac
-          cargo run --locked --example verify_module -- "$module"
+          cargo run --locked --package template --example verify_module -- "$module"
 
       - name: Verify Windows module through TinyBus loader
         if: ${{ runner.os == 'Windows' }}
@@ -248,7 +270,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $libraryName = $env:CRATE_NAME.Replace('-', '_')
           $module = "target/release/$libraryName.dll"
-          $verifyRoot = Join-Path $env:RUNNER_TEMP 'rust-template-module-verify'
+          $verifyRoot = Join-Path $env:RUNNER_TEMP 'template-module-verify'
           New-Item -ItemType Directory -Force $verifyRoot | Out-Null
 
           $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -278,7 +300,7 @@ jobs:
 
           $verifiedModule = Join-Path $verifyRoot "$libraryName.dll"
           Copy-Item -LiteralPath $module -Destination $verifiedModule
-          cargo run --locked --example verify_module -- $verifiedModule
+          cargo run --locked --package template --example verify_module -- $verifiedModule
 
       - name: Assemble Unix module package
         if: ${{ runner.os != 'Windows' }}
@@ -414,7 +436,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -430,7 +452,7 @@ jobs:
           fi
 
       - name: Build installable module
-        run: cargo build --locked --release --lib
+        run: cargo build --locked --release --lib --package ${{ env.RELEASE_PACKAGE }}
 
       - name: Verify module through TinyBus loader
         env:
@@ -441,7 +463,7 @@ jobs:
           verify_root="/opt/${CRATE_NAME}-module-verify"
           install -d -m 700 "$verify_root"
           install -m 755 "target/release/lib${library_name}.so" "$verify_root/"
-          cargo run --locked --example verify_module -- \
+          cargo run --locked --package template --example verify_module -- \
             "$verify_root/lib${library_name}.so"
 
       - name: Assemble distribution module package
@@ -493,7 +515,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -565,5 +587,5 @@ jobs:
           cargo run --manifest-path vendor/tinybus/Cargo.toml --locked \
             --package tinybus --all-features --example github_module_host -- \
             "$release_url" "$archive" "$sha256"
-          cargo run --locked --example verify_github_release -- \
+          cargo run --locked --package template --example verify_github_release -- \
             "$release_url" "$archive" "$sha256"

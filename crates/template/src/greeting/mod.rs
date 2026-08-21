@@ -16,9 +16,9 @@ use crate::{Error, Result};
 /// # Examples
 ///
 /// ```
-/// # use rust_template::greet;
+/// # use template::greet;
 /// assert_eq!(greet("  Ferris  ")?, "Hello, Ferris!");
-/// # Ok::<(), rust_template::Error>(())
+/// # Ok::<(), template::Error>(())
 /// ```
 ///
 /// # Errors

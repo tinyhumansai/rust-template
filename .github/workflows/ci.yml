@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 env:
-  # Lint levels live in `[lints]` in Cargo.toml so local and CI runs agree;
-  # don't add a blanket RUSTFLAGS here.
+  # Lint levels live in `[workspace.lints]` in the root Cargo.toml so local and
+  # CI runs agree; don't add a blanket RUSTFLAGS here.
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -26,13 +26,15 @@ jobs:
           # This job executes repository code (cargo build/test); don't persist
           # the token in git config.
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
 
       - uses: Swatinem/rust-cache@v2
 
@@ -50,6 +52,35 @@ jobs:
 
       - name: Test default features
         run: cargo test
+
+      # `cargo build --all-targets` only *compiles* an example. `AGENTS.md`
+      # promises `cargo run -p template --example basic` works, and a compiled
+      # example can still fail on its first line.
+      - name: Run the bundled example
+        run: cargo run -p template --example basic
+
+      # `crates/template-bus` exists so a host can name the payload types
+      # without compiling the module. That promise is invisible in a diff,
+      # because a forbidden dependency arrives transitively through a feature
+      # someone enabled one crate away — so it is asserted rather than
+      # documented.
+      #
+      # The FORWARD form is required. `cargo tree -i <crate> -p template-bus`
+      # discards the `-p` scope, prints the whole-workspace inverse tree, and
+      # exits 0 looking clean even when this crate is the one at fault.
+      - name: Assert the contract crate stays transport-free
+        run: |
+          set -euo pipefail
+          forbidden="$(cargo tree -p template-bus -e normal,build --prefix none \
+            | grep -Ei 'tinybus|tokio|reqwest|ureq|hyper|rusqlite|git2' || true)"
+          if [ -n "$forbidden" ]; then
+            echo "template-bus pulled in a dependency its manifest forbids:" >&2
+            echo "$forbidden" >&2
+            echo >&2
+            echo "The contract is what a host compiles against. It must stay free" >&2
+            echo "of transports, async runtimes, HTTP clients and native libraries." >&2
+            exit 1
+          fi
 
       - name: Require 90% line coverage in every source file
         run: .github/scripts/check-file-coverage.sh 90 coverage.json
@@ -69,7 +100,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -87,16 +118,19 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
+      # `rust-version` is inherited from `[workspace.package]`, so every member
+      # reports the same value. Read it off the package the module ships as
+      # rather than off `packages[0]`, whose order cargo does not promise.
       - name: Read rust-version from Cargo.toml
         id: msrv
         run: |
           set -euo pipefail
           msrv="$(cargo metadata --format-version 1 --no-deps \
-            | jq -r '.packages[0].rust_version')"
+            | jq -r '.packages[] | select(.name == "template") | .rust_version')"
           if [[ -z "$msrv" || "$msrv" == "null" ]]; then
-            echo "package.rust-version is not set in Cargo.toml" >&2
+            echo "workspace.package.rust-version is not set in Cargo.toml" >&2
             exit 1
           fi
           echo "version=$msrv" >> "$GITHUB_OUTPUT"
@@ -117,7 +151,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          submodules: true
+          submodules: recursive
 
       - name: Check advisories, licenses, bans, and sources
         uses: EmbarkStudios/cargo-deny-action@v2
