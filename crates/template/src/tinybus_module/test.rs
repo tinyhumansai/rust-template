@@ -14,12 +14,12 @@ fn declared_methods_match_the_dispatch_table() {
         .map(|member| member.to_string())
         .collect::<Vec<_>>();
 
-    assert_eq!(methods, names::METHODS);
+    assert_eq!(methods, names::METHODS.to_vec());
 }
 
 #[test]
 fn the_served_interface_name_matches_the_contract() {
-    assert_eq!(GreetingService.name(), names::INTERFACE);
+    assert_eq!(GreetingService.name().to_string(), names::INTERFACE);
 }
 
 #[tokio::test]
