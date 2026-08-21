@@ -24,7 +24,10 @@ fn a_response_serializes_to_its_wire_form() {
 fn a_request_round_trips_through_json() {
     let request = GreetRequest::new("  Ferris  ");
     let encoded = serde_json::to_string(&request).unwrap();
-    assert_eq!(serde_json::from_str::<GreetRequest>(&encoded).unwrap(), request);
+    assert_eq!(
+        serde_json::from_str::<GreetRequest>(&encoded).unwrap(),
+        request
+    );
 }
 
 #[test]
@@ -51,7 +54,10 @@ fn a_response_missing_its_greeting_is_rejected() {
 
 #[test]
 fn constructors_accept_both_borrowed_and_owned_names() {
-    assert_eq!(GreetRequest::new(String::from("Ferris")), GreetRequest::new("Ferris"));
+    assert_eq!(
+        GreetRequest::new(String::from("Ferris")),
+        GreetRequest::new("Ferris")
+    );
     assert_eq!(
         GreetResponse::new(String::from("Hi")),
         GreetResponse::new("Hi")
