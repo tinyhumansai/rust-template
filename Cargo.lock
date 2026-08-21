@@ -469,7 +469,7 @@ dependencies = [
 
 [[package]]
 name = "template"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "serde_json",
  "template-bus",
@@ -481,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "template-bus"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
