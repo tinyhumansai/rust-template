@@ -27,7 +27,10 @@ repository = "https://github.com/tinyhumansai/rust-template"
 [workspace.dependencies]
 # The wire contract. `crates/template` depends on it and re-exports it, so a
 # host that only makes calls takes this crate alone.
-template-bus = { path = "crates/template-bus", version = "0.1.5" }
+# No `version` requirement on purpose: the workspace version moves on every
+# release, and a pinned requirement here would stop resolving the moment it did.
+# Nothing in this workspace is published, so the path is the whole address.
+template-bus = { path = "crates/template-bus" }
 # TinyBus defines the message types, interface macro, and frozen module ABI
 # used by the generated integration. Socket and CLI features are unnecessary
 # here.
